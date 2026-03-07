@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "incremental": true,
+    "module": "esnext",
+    "esModuleInterop": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "declaration": true,
+    "outDir": "dist",
+    "target": "es2019"
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist", "tests", "e2e", "**/*.test.ts", "vitest.config.ts"]
+}

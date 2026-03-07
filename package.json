@@ -1,0 +1,79 @@
+{
+  "name": "@18ways/core",
+  "version": "0.0.3",
+  "type": "module",
+  "main": "./index.ts",
+  "module": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "import": "./index.ts"
+    },
+    "./common": {
+      "types": "./common.ts",
+      "import": "./common.ts"
+    },
+    "./crypto": {
+      "types": "./crypto.ts",
+      "import": "./crypto.ts"
+    },
+    "./cookie-utils": {
+      "types": "./cookie-utils.ts",
+      "import": "./cookie-utils.ts"
+    },
+    "./i18n-shared": {
+      "types": "./i18n-shared.ts",
+      "import": "./i18n-shared.ts"
+    },
+    "./locale-engine": {
+      "types": "./locale-engine.ts",
+      "import": "./locale-engine.ts"
+    },
+    "./object-utils": {
+      "types": "./object-utils.ts",
+      "import": "./object-utils.ts"
+    },
+    "./translation-store": {
+      "types": "./translation-store.ts",
+      "import": "./translation-store.ts"
+    },
+    "./internal-i18n": {
+      "types": "./internal-i18n.ts",
+      "import": "./internal-i18n.ts"
+    },
+    "./engine": {
+      "types": "./engine.ts",
+      "import": "./engine.ts"
+    },
+    "./parsers/ways-parser": {
+      "types": "./parsers/ways-parser.ts",
+      "import": "./parsers/ways-parser.ts"
+    },
+    "./parsers/intl-runtime": {
+      "types": "./parsers/intl-runtime.ts",
+      "import": "./parsers/intl-runtime.ts"
+    }
+  },
+  "scripts": {
+    "build": "echo '18ways-core build: source-only package'",
+    "ts:check": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "e2e": "bun run e2e/run-core-e2e.ts"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0",
+    "set-value": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "@types/node": "^22.10.0",
+    "@types/set-value": "^4.0.3",
+    "typescript": "^5.6.2",
+    "vitest": "^3.2.4"
+  },
+  "license": "ISC",
+  "description": "Framework-agnostic core runtime for 18ways",
+  "packageManager": "bun@1.3.8"
+}
