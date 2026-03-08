@@ -9,6 +9,50 @@ export const WAYS_LOCALE_HEADER_NAME = 'x-18ways-locale';
 export const WAYS_PATHNAME_HEADER_NAME = 'x-18ways-pathname';
 export const WAYS_LOCALIZED_PATHNAME_HEADER_NAME = 'x-18ways-localized-pathname';
 
+export const SUPPORTED_LOCALES = [
+  'en-US',
+  'en-GB',
+  'es-ES',
+  'es-MX',
+  'fr-FR',
+  'fr-CA',
+  'de-DE',
+  'it-IT',
+  'pt-BR',
+  'pt-PT',
+  'nl-NL',
+  'ru-RU',
+  'ja-JP',
+  'zh-CN',
+  'zh-TW',
+  'ko-KR',
+  'ar-SA',
+  'hi-IN',
+  'bn-BD',
+  'pa-IN',
+  'vi-VN',
+  'th-TH',
+  'tr-TR',
+  'pl-PL',
+  'uk-UA',
+  'cs-CZ',
+  'sv-SE',
+  'da-DK',
+  'fi-FI',
+  'no-NO',
+  'el-GR',
+  'he-IL',
+  'hu-HU',
+  'ro-RO',
+  'id-ID',
+  'ms-MY',
+  'fil-PH',
+  'sw-KE',
+  'af-ZA',
+] as const;
+
+export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
+
 export type WaysPathRoutingPattern = string | RegExp;
 export type WaysPathRoutingConfig = {
   include?: WaysPathRoutingPattern[];
