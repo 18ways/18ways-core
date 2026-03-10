@@ -3,8 +3,8 @@ import {
   localeToFlagEmoji as localeToFlagEmojiBase,
 } from './locale';
 
-export const WAYS_LOCALE_COOKIE_NAME = '18ways-locale';
-export const WAYS_SESSION_LOCALE_COOKIE_NAME = '18ways-session-locale';
+export const WAYS_LOCALE_COOKIE_NAME = '18ways_locale';
+export const WAYS_SESSION_LOCALE_COOKIE_NAME = '18ways_session_locale';
 export const WAYS_LOCALE_HEADER_NAME = 'x-18ways-locale';
 export const WAYS_PATHNAME_HEADER_NAME = 'x-18ways-pathname';
 export const WAYS_LOCALIZED_PATHNAME_HEADER_NAME = 'x-18ways-localized-pathname';
