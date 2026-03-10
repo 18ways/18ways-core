@@ -3,15 +3,12 @@ import { fetchAcceptedLocales } from '../i18n-shared';
 
 describe('fetchAcceptedLocales origin handling', () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          languages: [{ code: 'en-GB' }, { code: 'ja-JP' }],
-        }),
-      })
-    );
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        languages: [{ code: 'en-GB' }, { code: 'ja-JP' }],
+      }),
+    }) as typeof fetch;
   });
 
   it('passes origin header when an origin is provided', async () => {
@@ -90,5 +87,15 @@ describe('fetchAcceptedLocales origin handling', () => {
         }),
       })
     );
+  });
+
+  it('does not inject an unsupported fallback locale into the accepted-locale list', async () => {
+    const locales = await fetchAcceptedLocales('en-US', {
+      forceRefresh: true,
+      origin: 'https://18ways.com',
+      apiKey: 'test-public-api-key',
+    });
+
+    expect(locales).toEqual(['en-GB', 'ja-JP']);
   });
 });

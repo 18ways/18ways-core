@@ -227,6 +227,21 @@ const localeMapFromSupported = (supportedLocales: string[]): Map<string, string>
   return map;
 };
 
+const getLocaleLanguage = (locale: string): string => locale.split('-')[0]?.toLowerCase() || '';
+
+export const findExactSupportedLocale = (
+  candidate: string | null | undefined,
+  supportedLocales: string[]
+): string | null => {
+  if (!candidate) return null;
+
+  const normalizedCandidate = canonicalizeLocale(candidate);
+  if (!normalizedCandidate) return null;
+
+  const supportedMap = localeMapFromSupported(supportedLocales);
+  return supportedMap.get(normalizedCandidate.toLowerCase()) || null;
+};
+
 export const findSupportedLocale = (
   candidate: string | null | undefined,
   supportedLocales: string[]
@@ -241,45 +256,16 @@ export const findSupportedLocale = (
   const exact = supportedMap.get(normalizedCandidate.toLowerCase());
   if (exact) return exact;
 
-  const language = normalizedCandidate.split('-')[0]?.toLowerCase();
-  if (!language) return null;
+  const candidateLanguage = getLocaleLanguage(normalizedCandidate);
+  if (!candidateLanguage) return null;
 
   for (const locale of supportedMap.values()) {
-    if (locale.split('-')[0]?.toLowerCase() === language) {
+    if (getLocaleLanguage(locale) === candidateLanguage) {
       return locale;
     }
   }
 
   return null;
-};
-
-export const resolveLocaleFromAcceptLanguage = (
-  acceptLanguageHeader: string | null,
-  supportedLocales: string[],
-  fallbackLocale: string
-): string => {
-  if (!acceptLanguageHeader) return fallbackLocale;
-
-  const tokens = acceptLanguageHeader
-    .split(',')
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .map((token) => token.split(';')[0]?.trim())
-    .filter((token): token is string => Boolean(token));
-
-  for (const token of tokens) {
-    if (supportedLocales.length) {
-      const matched = findSupportedLocale(token, supportedLocales);
-      if (matched) return matched;
-    }
-
-    const recognized = recognizeLocale(token);
-    if (recognized) {
-      return recognized;
-    }
-  }
-
-  return fallbackLocale;
 };
 
 export const extractRecognizedLocalePrefix = (
@@ -329,35 +315,15 @@ export const extractLocalePrefix = (
   unlocalizedPathname: string;
   localizedPathname: string;
 } => {
-  const normalizedPathname = normalizePathname(pathname);
-  const segments = normalizedPathname.split('/').filter(Boolean);
-  const first = segments[0];
-
-  if (!first) {
-    return {
-      locale: null,
-      unlocalizedPathname: '/',
-      localizedPathname: normalizedPathname,
-    };
+  const recognizedPrefix = extractRecognizedLocalePrefix(pathname);
+  if (!recognizedPrefix.locale) {
+    return recognizedPrefix;
   }
-
-  const matchedLocale = findSupportedLocale(first, supportedLocales);
-  if (!matchedLocale) {
-    return {
-      locale: null,
-      unlocalizedPathname: normalizedPathname,
-      localizedPathname: normalizedPathname,
-    };
-  }
-
-  const remainingSegments = segments.slice(1);
-  const unlocalizedPathname =
-    remainingSegments.length === 0 ? '/' : `/${remainingSegments.join('/')}`;
 
   return {
-    locale: matchedLocale,
-    unlocalizedPathname,
-    localizedPathname: normalizedPathname,
+    locale: findExactSupportedLocale(recognizedPrefix.locale, supportedLocales),
+    unlocalizedPathname: recognizedPrefix.unlocalizedPathname,
+    localizedPathname: recognizedPrefix.localizedPathname,
   };
 };
 
@@ -498,9 +464,17 @@ export const fetchAcceptedLocales = async (
 
     const data = await response.json();
     const fetchedLocales = parseLocalesFromApiResponse(data);
+    const normalizedFallbackLocale = findSupportedLocale(defaultLocale, fetchedLocales);
 
     const locales = fetchedLocales.length
-      ? Array.from(new Set([defaultLocale, ...fetchedLocales]))
+      ? Array.from(
+          new Set(
+            (normalizedFallbackLocale
+              ? [normalizedFallbackLocale, ...fetchedLocales]
+              : fetchedLocales
+            ).filter(Boolean)
+          )
+        )
       : [defaultLocale];
 
     acceptedLocalesCache = {
