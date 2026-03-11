@@ -320,6 +320,15 @@ export const extractLocalePrefix = (
     return recognizedPrefix;
   }
 
+  const matchedSupportedLocale = findSupportedLocale(recognizedPrefix.locale, supportedLocales);
+  if (!matchedSupportedLocale) {
+    return {
+      locale: null,
+      unlocalizedPathname: recognizedPrefix.localizedPathname,
+      localizedPathname: recognizedPrefix.localizedPathname,
+    };
+  }
+
   return {
     locale: findExactSupportedLocale(recognizedPrefix.locale, supportedLocales),
     unlocalizedPathname: recognizedPrefix.unlocalizedPathname,

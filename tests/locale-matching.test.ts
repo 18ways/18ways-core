@@ -10,6 +10,14 @@ describe('locale matching', () => {
     });
   });
 
+  it('does not strip recognizable non-locale routes when they cannot map to a supported locale', () => {
+    expect(extractLocalePrefix('/pricing', ['en-GB'])).toEqual({
+      locale: null,
+      unlocalizedPathname: '/pricing',
+      localizedPathname: '/pricing',
+    });
+  });
+
   it('matches exact supported locales without falling through to same-language variants', () => {
     expect(findExactSupportedLocale('en-US', ['en-GB', 'en-US'])).toBe('en-US');
     expect(findExactSupportedLocale('en-US', ['en-GB'])).toBeNull();
