@@ -109,6 +109,35 @@ export class TranslationStore {
     this.emit(true);
   };
 
+  deleteContextTranslations = (contextKey: string): void => {
+    if (!contextKey) {
+      return;
+    }
+
+    let changed = false;
+    Object.keys(this.translations).forEach((locale) => {
+      const localeTranslations = this.translations[locale] as Record<string, unknown> | undefined;
+      if (!localeTranslations || typeof localeTranslations !== 'object') {
+        return;
+      }
+
+      if (!(contextKey in localeTranslations)) {
+        return;
+      }
+
+      delete (localeTranslations as Record<string, unknown>)[contextKey];
+      changed = true;
+
+      if (!Object.keys(localeTranslations).length) {
+        delete (this.translations as Record<string, unknown>)[locale];
+      }
+    });
+
+    if (changed) {
+      this.emit(true);
+    }
+  };
+
   enqueue = (entry: InProgressTranslation): boolean => {
     const id = translationEntryId(entry);
 
