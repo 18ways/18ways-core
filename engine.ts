@@ -4,6 +4,7 @@ import {
   init,
   type Fetcher,
   type InProgressTranslation,
+  type _RequestInitDecorator,
   type TranslationContextInput,
   type TranslationContextInputObject,
   type Translations,
@@ -56,6 +57,8 @@ export type WaysEngineOptions = {
   fetcher?: Fetcher;
   cacheTtlSeconds?: number;
   origin?: string;
+  /** @internal Adapter-only fetch init hook. */
+  _requestInitDecorator?: _RequestInitDecorator;
 };
 
 export type WaysEngineTranslateOptions = {
@@ -86,6 +89,7 @@ export class WaysEngine {
       fetcher: options.fetcher,
       cacheTtlSeconds: options.cacheTtlSeconds,
       origin: options.origin,
+      _requestInitDecorator: options._requestInitDecorator,
     });
   }
 

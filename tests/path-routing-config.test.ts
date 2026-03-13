@@ -7,6 +7,12 @@ describe('path routing config', () => {
     expect(pathMatchesPattern('/docs/getting-started', '/dashboard')).toBe(false);
   });
 
+  it('treats / as a catch-all path pattern', () => {
+    expect(pathMatchesPattern('/docs/getting-started', '/')).toBe(true);
+    expect(pathMatchesPattern('/dashboard', '/')).toBe(true);
+    expect(pathMatchesPattern('/', '/')).toBe(true);
+  });
+
   it('matches wildcard string patterns', () => {
     expect(pathMatchesPattern('/docs/getting-started', '/docs/*')).toBe(true);
     expect(pathMatchesPattern('/pricing', '/docs/*')).toBe(false);
@@ -41,6 +47,29 @@ describe('path routing config', () => {
       isPathRoutingEnabled('/pricing', {
         include: ['/docs/*'],
         exclude: ['/docs/private*'],
+      })
+    ).toBe(false);
+  });
+
+  it('auto-excludes infra paths when path routing is explicitly enabled', () => {
+    expect(isPathRoutingEnabled('/docs', {})).toBe(true);
+    expect(isPathRoutingEnabled('/api/translations', {})).toBe(false);
+    expect(isPathRoutingEnabled('/_next/static/chunk.js', {})).toBe(false);
+    expect(isPathRoutingEnabled('/robots.txt', {})).toBe(false);
+  });
+
+  it('lets explicit include patterns override auto-excluded paths', () => {
+    expect(
+      isPathRoutingEnabled('/robots.txt', {
+        include: ['/robots.txt'],
+      })
+    ).toBe(true);
+  });
+
+  it('does not let a catch-all include re-enable auto-excluded infra paths', () => {
+    expect(
+      isPathRoutingEnabled('/robots.txt', {
+        include: ['/'],
       })
     ).toBe(false);
   });

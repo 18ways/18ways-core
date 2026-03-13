@@ -1,4 +1,5 @@
 import { generateHashIdV2 } from './crypto';
+import { canonicalizeLocale, findSupportedLocale } from './i18n-shared';
 
 export interface Translations {
   // Leaf arrays store encrypted translation payload strings.
@@ -6,6 +7,13 @@ export interface Translations {
 }
 
 export type Fetcher = typeof fetch;
+export type _RequestInitLike = RequestInit & Record<string, unknown>;
+export type _RequestInitDecorator = (input: {
+  url: string;
+  method: string;
+  requestInit: _RequestInitLike;
+  cacheTtlSeconds: number;
+}) => _RequestInitLike;
 
 interface InitOptions {
   key?: string;
@@ -13,6 +21,8 @@ interface InitOptions {
   fetcher?: Fetcher;
   cacheTtlSeconds?: number;
   origin?: string;
+  /** @internal Adapter-only fetch init hook. */
+  _requestInitDecorator?: _RequestInitDecorator;
 }
 
 export interface TranslationContextValue {
@@ -69,24 +79,199 @@ interface FetchXOptions {
   onError: (error: Error) => any;
 }
 
-interface NextFetchRequestInit extends RequestInit {
-  next?: {
-    revalidate: number;
-  };
-}
-
-const DEFAULT_18WAYS_API_URL =
-  process.env.NEXT_PUBLIC_18WAYS_PREVIEW_API_URL ||
-  process.env.NEXT_PUBLIC_18WAYS_API_URL ||
-  '/api';
+const DEFAULT_18WAYS_API_URL = 'https://internal.18ways.com/api';
+const DEFAULT_LOCALE = 'en-GB';
+const DEFAULT_ORIGIN = 'http://localhost:3000';
+const DEFAULT_ACCEPTED_LOCALES_CACHE_TTL_SECONDS = 60;
 
 let apiKey: string | undefined;
 let apiUrl: string | undefined;
 let customFetcher: Fetcher | undefined;
 let requestOrigin: string | undefined;
+let customRequestInitDecorator: _RequestInitDecorator | undefined;
 let serverCache: Translations | null = null;
-const DEFAULT_REVALIDATE_SECONDS = 10 * 60;
-let revalidateSeconds = DEFAULT_REVALIDATE_SECONDS;
+const DEFAULT_CACHE_TTL_SECONDS = 10 * 60;
+let cacheTtlSeconds = DEFAULT_CACHE_TTL_SECONDS;
+
+const normalizeOrigin = (origin: string): string => origin.replace(/\/$/, '');
+
+const resolveApiBase = (explicitApiUrl?: string | null): string =>
+  normalizeOrigin(explicitApiUrl || DEFAULT_18WAYS_API_URL);
+
+const joinApiBaseAndPath = (base: string, path: string): string => {
+  const normalizedBase = normalizeOrigin(base);
+  if (!path.startsWith('/api/')) {
+    return `${normalizedBase}${path}`;
+  }
+
+  if (normalizedBase.endsWith('/api')) {
+    return `${normalizedBase}${path.slice(4)}`;
+  }
+
+  return `${normalizedBase}${path}`;
+};
+
+const resolveApiKey = (explicitApiKey?: string): string | undefined => {
+  if (typeof explicitApiKey !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = explicitApiKey.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const parseLocalesFromApiResponse = (data: any): string[] => {
+  const locales: string[] = [];
+  const languages = Array.isArray(data?.languages) ? data.languages : [];
+
+  for (const language of languages) {
+    if (typeof language === 'string') {
+      locales.push(language);
+      continue;
+    }
+
+    if (language && typeof language.code === 'string') {
+      locales.push(language.code);
+    }
+  }
+
+  return Array.from(new Set(locales.map(canonicalizeLocale).filter(Boolean)));
+};
+
+export const resolveOrigin = (input: {
+  explicitOrigin?: string | null;
+  host?: string | null;
+  forwardedProto?: string | null;
+  fallbackOrigin?: string | null;
+}): string => {
+  if (input.explicitOrigin) {
+    return normalizeOrigin(input.explicitOrigin);
+  }
+
+  if (input.host) {
+    const proto = input.forwardedProto || 'https';
+    return `${proto}://${input.host}`;
+  }
+
+  if (input.fallbackOrigin) {
+    return normalizeOrigin(input.fallbackOrigin);
+  }
+
+  return DEFAULT_ORIGIN;
+};
+
+export const _composeRequestInitDecorators = (
+  ...decorators: Array<_RequestInitDecorator | undefined>
+): _RequestInitDecorator | undefined => {
+  const activeDecorators = decorators.filter(
+    (decorator): decorator is _RequestInitDecorator => typeof decorator === 'function'
+  );
+
+  if (!activeDecorators.length) {
+    return undefined;
+  }
+
+  return ({ url, method, requestInit, cacheTtlSeconds }) =>
+    activeDecorators.reduce<_RequestInitLike>((currentRequestInit, decorator) => {
+      return decorator({
+        url,
+        method,
+        requestInit: currentRequestInit,
+        cacheTtlSeconds,
+      });
+    }, requestInit);
+};
+
+export const fetchAcceptedLocales = async (
+  fallbackLocale?: string,
+  options?: {
+    forceRefresh?: boolean;
+    origin?: string;
+    apiKey?: string;
+    apiUrl?: string;
+    fetcher?: Fetcher;
+    cacheTtlSeconds?: number;
+    /** @internal Adapter-only fetch init hook. */
+    _requestInitDecorator?: _RequestInitDecorator;
+  }
+): Promise<string[]> => {
+  const defaultLocale = canonicalizeLocale(fallbackLocale || DEFAULT_LOCALE);
+  const requestOrigin = options?.origin ? normalizeOrigin(options.origin) : null;
+  const acceptedLocalesApiKey = resolveApiKey(options?.apiKey);
+  const acceptedLocalesCacheTtlSeconds =
+    typeof options?.cacheTtlSeconds === 'number' &&
+    Number.isFinite(options.cacheTtlSeconds) &&
+    options.cacheTtlSeconds >= 0
+      ? Math.floor(options.cacheTtlSeconds)
+      : DEFAULT_ACCEPTED_LOCALES_CACHE_TTL_SECONDS;
+
+  if (!acceptedLocalesApiKey) {
+    return [defaultLocale];
+  }
+
+  const endpoint = joinApiBaseAndPath(resolveApiBase(options?.apiUrl), '/api/enabled-languages');
+
+  try {
+    const headers: Record<string, string> = {
+      'x-api-key': acceptedLocalesApiKey,
+    };
+
+    if (requestOrigin) {
+      headers.origin = requestOrigin;
+    }
+
+    const requestInit: _RequestInitLike =
+      options?.forceRefresh || acceptedLocalesCacheTtlSeconds === 0
+        ? {
+            method: 'GET',
+            headers,
+            cache: 'no-store',
+          }
+        : {
+            method: 'GET',
+            headers,
+            cache: 'force-cache',
+          };
+
+    const finalRequestInit = options?._requestInitDecorator
+      ? options._requestInitDecorator({
+          url: endpoint,
+          method: 'GET',
+          requestInit,
+          cacheTtlSeconds: acceptedLocalesCacheTtlSeconds,
+        })
+      : requestInit;
+
+    const response = await (options?.fetcher || fetch)(endpoint, finalRequestInit as RequestInit);
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      throw new Error(
+        `Failed to fetch accepted locales: status=${response.status} origin=${requestOrigin || 'none'} endpoint=${endpoint} body=${errorBody.slice(0, 200)}`
+      );
+    }
+
+    const data = await response.json();
+    const fetchedLocales = parseLocalesFromApiResponse(data);
+    const normalizedFallbackLocale = findSupportedLocale(defaultLocale, fetchedLocales);
+
+    const locales = fetchedLocales.length
+      ? Array.from(
+          new Set(
+            (normalizedFallbackLocale
+              ? [normalizedFallbackLocale, ...fetchedLocales]
+              : fetchedLocales
+            ).filter(Boolean)
+          )
+        )
+      : [defaultLocale];
+
+    return locales;
+  } catch (error) {
+    console.error('[18ways] Failed to load accepted locales:', error);
+    return [defaultLocale];
+  }
+};
 
 export const getInMemoryTranslations = () => {
   if (typeof window !== 'undefined') {
@@ -120,24 +305,19 @@ export const init = (keyOrOptions: string | InitOptions, rawOptions?: InitOption
     throw new Error('Cannot init without an API key');
   }
 
-  if (options.apiUrl) {
-    apiUrl = options.apiUrl;
-  }
-
-  if (options.fetcher) {
-    customFetcher = options.fetcher;
-  }
-
+  apiUrl = options.apiUrl;
+  customFetcher = options.fetcher;
   requestOrigin = options.origin;
+  customRequestInitDecorator = options._requestInitDecorator;
 
   if (
     typeof options.cacheTtlSeconds === 'number' &&
     Number.isFinite(options.cacheTtlSeconds) &&
     options.cacheTtlSeconds >= 0
   ) {
-    revalidateSeconds = Math.floor(options.cacheTtlSeconds);
+    cacheTtlSeconds = Math.floor(options.cacheTtlSeconds);
   } else {
-    revalidateSeconds = DEFAULT_REVALIDATE_SECONDS;
+    cacheTtlSeconds = DEFAULT_CACHE_TTL_SECONDS;
   }
 };
 
@@ -147,11 +327,7 @@ const fetchX = async <T>({ url, method, payload, onError }: FetchXOptions): Prom
   }
 
   try {
-    const effectiveApiUrl = (apiUrl || DEFAULT_18WAYS_API_URL).replace(/\/$/, '');
-    const isApiPrefixedPath = url.startsWith('/api/');
-    const requestUrl = isApiPrefixedPath
-      ? `${effectiveApiUrl}${effectiveApiUrl.endsWith('/api') ? url.slice(4) : url}`
-      : `${effectiveApiUrl}${url}`;
+    const requestUrl = joinApiBaseAndPath(resolveApiBase(apiUrl), url);
     const fetchFn = customFetcher || fetch;
     const requestHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -163,19 +339,26 @@ const fetchX = async <T>({ url, method, payload, onError }: FetchXOptions): Prom
       requestHeaders.origin = requestOrigin;
     }
 
-    const requestInit: NextFetchRequestInit = {
+    const requestInit: _RequestInitLike = {
       method,
       headers: requestHeaders,
       body: payload ? JSON.stringify(payload) : undefined,
     };
 
-    // Next.js data cache uses `next.revalidate` on server-side fetch calls.
-    if (typeof window === 'undefined' && method === 'GET') {
-      requestInit.cache = 'force-cache';
-      requestInit.next = { revalidate: revalidateSeconds };
+    if (method === 'GET') {
+      requestInit.cache = cacheTtlSeconds === 0 ? 'no-store' : 'force-cache';
     }
 
-    const result = await fetchFn(requestUrl, requestInit);
+    const finalRequestInit = customRequestInitDecorator
+      ? customRequestInitDecorator({
+          url: requestUrl,
+          method,
+          requestInit,
+          cacheTtlSeconds,
+        })
+      : requestInit;
+
+    const result = await fetchFn(requestUrl, finalRequestInit as RequestInit);
 
     if (!result.ok) {
       // Try to parse error response, but don't fail if it's not JSON

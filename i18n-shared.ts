@@ -4,9 +4,6 @@ import {
 } from './locale';
 
 export const WAYS_LOCALE_COOKIE_NAME = '18ways_locale';
-export const WAYS_LOCALE_HEADER_NAME = 'x-18ways-locale';
-export const WAYS_PATHNAME_HEADER_NAME = 'x-18ways-pathname';
-export const WAYS_LOCALIZED_PATHNAME_HEADER_NAME = 'x-18ways-localized-pathname';
 
 export const SUPPORTED_LOCALES = [
   'en-US',
@@ -58,35 +55,15 @@ export type WaysPathRoutingConfig = {
   exclude?: WaysPathRoutingPattern[];
 };
 
-export const DEFAULT_WAYS_PATH_ROUTING: WaysPathRoutingConfig = {
-  exclude: [
-    '/api',
-    '/trpc',
-    '/dashboard',
-    '/_next',
-    '/favicon.ico',
-    '/robots.txt',
-    '/manifest.webmanifest',
-  ],
-};
-
-const DEFAULT_18WAYS_API_URL =
-  process.env.NEXT_PUBLIC_18WAYS_PREVIEW_API_URL ||
-  process.env.NEXT_PUBLIC_18WAYS_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  '/api';
-
-const DEFAULT_LOCALE = 'en-GB';
-const ACCEPTED_LOCALES_CACHE_TTL_MS = 5 * 60 * 1000;
-
-type AcceptedLocalesCache = {
-  locales: string[];
-  expiresAt: number;
-  origin: string | null;
-  apiKey: string | null;
-};
-
-let acceptedLocalesCache: AcceptedLocalesCache | null = null;
+const AUTO_EXCLUDED_PATH_ROUTING_PATTERNS: WaysPathRoutingPattern[] = [
+  /^\/_next(?:\/|$)/,
+  /^\/api(?:\/|$)/,
+  '/robots.txt',
+  '/favicon.ico',
+  '/manifest.webmanifest',
+  '/site.webmanifest',
+  '/sw.js',
+];
 
 export const canonicalizeLocale = canonicalizeLocaleBase;
 export const localeToFlagEmoji = localeToFlagEmojiBase;
@@ -134,7 +111,7 @@ export const pathMatchesPattern = (pathname: string, pattern: WaysPathRoutingPat
 
   const normalizedPattern = normalizePatternString(trimmed);
   if (normalizedPattern === '/') {
-    return normalizedPathname === '/';
+    return normalizedPathname.startsWith('/');
   }
 
   return (
@@ -147,18 +124,41 @@ export const isPathRoutingEnabled = (pathname: string, config?: WaysPathRoutingC
   const normalizedPathname = normalizePathname(pathname);
   const includePatterns = config?.include || [];
   const excludePatterns = config?.exclude || [];
+  const explicitlyIncluded = includePatterns.some((pattern) =>
+    pathMatchesPattern(normalizedPathname, pattern)
+  );
+  const explicitlyOverridesAutoExclude = includePatterns.some((pattern) => {
+    if (typeof pattern === 'string' && normalizePatternString(pattern.trim()) === '/') {
+      return false;
+    }
 
-  const included =
-    includePatterns.length === 0 ||
-    includePatterns.some((pattern) => pathMatchesPattern(normalizedPathname, pattern));
+    return pathMatchesPattern(normalizedPathname, pattern);
+  });
+
+  const included = includePatterns.length === 0 || explicitlyIncluded;
   if (!included) {
     return false;
   }
 
-  const excluded = excludePatterns.some((pattern) =>
+  const explicitlyExcluded = excludePatterns.some((pattern) =>
     pathMatchesPattern(normalizedPathname, pattern)
   );
-  return !excluded;
+  if (explicitlyExcluded) {
+    return false;
+  }
+
+  if (!config) {
+    return true;
+  }
+
+  const autoExcluded = AUTO_EXCLUDED_PATH_ROUTING_PATTERNS.some((pattern) =>
+    pathMatchesPattern(normalizedPathname, pattern)
+  );
+  if (autoExcluded && !explicitlyOverridesAutoExclude) {
+    return false;
+  }
+
+  return true;
 };
 
 export const isRecognizableLocale = (value: string | null | undefined): boolean => {
@@ -189,19 +189,6 @@ export const recognizeLocale = (value: string | null | undefined): string | null
 };
 
 const normalizeOrigin = (origin: string): string => origin.replace(/\/$/, '');
-
-const joinApiBaseAndPath = (base: string, path: string): string => {
-  const normalizedBase = normalizeOrigin(base);
-  if (!path.startsWith('/api/')) {
-    return `${normalizedBase}${path}`;
-  }
-
-  if (normalizedBase.endsWith('/api')) {
-    return `${normalizedBase}${path.slice(4)}`;
-  }
-
-  return `${normalizedBase}${path}`;
-};
 
 export const joinOriginAndPathname = (origin: string, pathname: string): string => {
   const normalizedOrigin = normalizeOrigin(origin);
@@ -334,175 +321,4 @@ export const extractLocalePrefix = (
     unlocalizedPathname: recognizedPrefix.unlocalizedPathname,
     localizedPathname: recognizedPrefix.localizedPathname,
   };
-};
-
-export const shouldBypassLocalization = (pathname: string): boolean => {
-  const normalizedPathname = normalizePathname(pathname);
-
-  if (
-    normalizedPathname.startsWith('/api') ||
-    normalizedPathname.startsWith('/dashboard') ||
-    normalizedPathname.startsWith('/_next') ||
-    normalizedPathname.startsWith('/trpc')
-  ) {
-    return true;
-  }
-
-  if (
-    normalizedPathname === '/favicon.ico' ||
-    normalizedPathname === '/robots.txt' ||
-    normalizedPathname === '/sitemap.xml' ||
-    normalizedPathname === '/manifest.webmanifest'
-  ) {
-    return true;
-  }
-
-  const hasFileExtension = /\.[a-zA-Z0-9]+$/.test(normalizedPathname);
-  if (hasFileExtension) {
-    return true;
-  }
-
-  return false;
-};
-
-export const resolveOrigin = (input: {
-  explicitOrigin?: string | null;
-  host?: string | null;
-  forwardedProto?: string | null;
-}): string => {
-  if (input.explicitOrigin) {
-    return normalizeOrigin(input.explicitOrigin);
-  }
-
-  if (input.host) {
-    const proto = input.forwardedProto || 'https';
-    return `${proto}://${input.host}`;
-  }
-
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL);
-  }
-
-  if (process.env.SITE_URL) {
-    return normalizeOrigin(process.env.SITE_URL);
-  }
-
-  return 'http://localhost:3000';
-};
-
-const resolveApiKey = (explicitApiKey?: string): string | undefined => {
-  if (typeof explicitApiKey !== 'string') {
-    return undefined;
-  }
-
-  const trimmed = explicitApiKey.trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const parseLocalesFromApiResponse = (data: any): string[] => {
-  const locales: string[] = [];
-  const languages = Array.isArray(data?.languages) ? data.languages : [];
-
-  for (const language of languages) {
-    if (typeof language === 'string') {
-      locales.push(language);
-      continue;
-    }
-
-    if (language && typeof language.code === 'string') {
-      locales.push(language.code);
-    }
-  }
-
-  return Array.from(new Set(locales.map(canonicalizeLocale).filter(Boolean)));
-};
-
-export const fetchAcceptedLocales = async (
-  fallbackLocale?: string,
-  options?: { forceRefresh?: boolean; origin?: string; apiKey?: string }
-): Promise<string[]> => {
-  const defaultLocale = canonicalizeLocale(fallbackLocale || DEFAULT_LOCALE);
-  const now = Date.now();
-  const requestOrigin = options?.origin ? normalizeOrigin(options.origin) : null;
-  const apiKey = resolveApiKey(options?.apiKey);
-
-  if (
-    !options?.forceRefresh &&
-    acceptedLocalesCache &&
-    acceptedLocalesCache.expiresAt > now &&
-    acceptedLocalesCache.origin === requestOrigin &&
-    acceptedLocalesCache.apiKey === (apiKey || null)
-  ) {
-    return acceptedLocalesCache.locales;
-  }
-
-  if (!apiKey) {
-    const locales = [defaultLocale];
-    acceptedLocalesCache = {
-      locales,
-      expiresAt: now + ACCEPTED_LOCALES_CACHE_TTL_MS,
-      origin: requestOrigin,
-      apiKey: null,
-    };
-    return locales;
-  }
-
-  const endpoint = joinApiBaseAndPath(DEFAULT_18WAYS_API_URL, '/api/enabled-languages');
-
-  try {
-    const headers: Record<string, string> = {
-      'x-api-key': apiKey,
-    };
-
-    if (requestOrigin) {
-      headers.origin = requestOrigin;
-    }
-
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      headers,
-      cache: 'no-store',
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '');
-      throw new Error(
-        `Failed to fetch accepted locales: status=${response.status} origin=${requestOrigin || 'none'} endpoint=${endpoint} body=${errorBody.slice(0, 200)}`
-      );
-    }
-
-    const data = await response.json();
-    const fetchedLocales = parseLocalesFromApiResponse(data);
-    const normalizedFallbackLocale = findSupportedLocale(defaultLocale, fetchedLocales);
-
-    const locales = fetchedLocales.length
-      ? Array.from(
-          new Set(
-            (normalizedFallbackLocale
-              ? [normalizedFallbackLocale, ...fetchedLocales]
-              : fetchedLocales
-            ).filter(Boolean)
-          )
-        )
-      : [defaultLocale];
-
-    acceptedLocalesCache = {
-      locales,
-      expiresAt: now + ACCEPTED_LOCALES_CACHE_TTL_MS,
-      origin: requestOrigin,
-      apiKey,
-    };
-
-    return locales;
-  } catch (error) {
-    console.error('[18ways] Failed to load accepted locales:', error);
-    const locales = [defaultLocale];
-    acceptedLocalesCache = {
-      locales,
-      expiresAt: now + ACCEPTED_LOCALES_CACHE_TTL_MS,
-      origin: requestOrigin,
-      apiKey,
-    };
-    return locales;
-  }
 };

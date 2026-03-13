@@ -6,7 +6,7 @@ describe('common - cache ttl', () => {
     vi.restoreAllMocks();
   });
 
-  it('uses default revalidate value when cache ttl is not provided', async () => {
+  it('uses generic force-cache semantics for GET requests by default', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ languages: [], total: 0 }),
@@ -20,31 +20,58 @@ describe('common - cache ttl', () => {
     await fetchEnabledLanguages();
 
     const call = fetchMock.mock.calls[0];
-    expect(call[1].next.revalidate).toBe(600);
     expect(call[1].cache).toBe('force-cache');
     expect(call[0]).toContain('/api/enabled-languages');
   });
 
-  it('uses custom revalidate value when cache ttl is provided', async () => {
+  it('switches GET requests to no-store when cache ttl is zero', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ languages: [], total: 0 }),
     });
+
+    init({
+      key: 'test-api-key',
+      fetcher: fetchMock as typeof fetch,
+      cacheTtlSeconds: 0,
+    });
+
+    await fetchEnabledLanguages();
+
+    const call = fetchMock.mock.calls[0];
+    expect(call[1].cache).toBe('no-store');
+  });
+
+  it('allows callers to decorate request init in a framework-specific way', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ languages: [], total: 0 }),
+    });
+    const requestInitDecorator = vi.fn(({ requestInit, cacheTtlSeconds }) => ({
+      ...requestInit,
+      frameworkCache: { ttl: cacheTtlSeconds },
+    }));
 
     init({
       key: 'test-api-key',
       fetcher: fetchMock as typeof fetch,
       cacheTtlSeconds: 90,
+      _requestInitDecorator: requestInitDecorator,
     });
 
     await fetchEnabledLanguages();
 
+    expect(requestInitDecorator).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        cacheTtlSeconds: 90,
+      })
+    );
     const call = fetchMock.mock.calls[0];
-    expect(call[1].next.revalidate).toBe(90);
-    expect(call[1].cache).toBe('force-cache');
+    expect(call[1].frameworkCache).toEqual({ ttl: 90 });
   });
 
-  it('does not apply Next cache options to POST requests', async () => {
+  it('does not apply GET cache semantics to POST requests', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: {}, errors: [] }),
@@ -60,7 +87,6 @@ describe('common - cache ttl', () => {
 
     const call = fetchMock.mock.calls[0];
     expect(call[1].method).toBe('POST');
-    expect(call[1].next).toBeUndefined();
     expect(call[1].cache).toBeUndefined();
   });
 
