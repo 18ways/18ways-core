@@ -20,9 +20,37 @@ type FetchTranslationsFn = (
 
 const ERROR_CACHE_TTL_MS = 1000 * 60;
 
-export const translationEntryId = (
+const normalizeContextFingerprint = (value?: string | null): string => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : '';
+};
+
+const translationEntryTriple = (
   entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textsHash'>
-) => `${entry.targetLocale}-${entry.key}-${entry.textsHash}`;
+) => JSON.stringify([entry.targetLocale, entry.key, entry.textsHash]);
+
+export const translationEntryId = (
+  entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textsHash' | 'contextFingerprint'>
+) =>
+  JSON.stringify([
+    entry.targetLocale,
+    entry.key,
+    entry.textsHash,
+    normalizeContextFingerprint(entry.contextFingerprint),
+  ]);
+
+const entryMatchesContextKey = (entryId: string, contextKey: string): boolean => {
+  try {
+    const parsed = JSON.parse(entryId);
+    return Array.isArray(parsed) && parsed[1] === contextKey;
+  } catch {
+    return false;
+  }
+};
 
 export class TranslationStore {
   private translations: Translations;
@@ -31,6 +59,7 @@ export class TranslationStore {
   private translationListeners = new Set<() => void>();
   private pending = new Map<string, InProgressTranslation>();
   private inFlight = new Set<string>();
+  private completed = new Set<string>();
   private pendingByKey = new Map<string, number>();
   private inFlightByKey = new Map<string, number>();
   private errorCache = new Map<string, number>();
@@ -133,6 +162,18 @@ export class TranslationStore {
       }
     });
 
+    Array.from(this.completed).forEach((entryId) => {
+      if (entryMatchesContextKey(entryId, contextKey)) {
+        this.completed.delete(entryId);
+      }
+    });
+
+    Array.from(this.errorCache.keys()).forEach((entryId) => {
+      if (entryMatchesContextKey(entryId, contextKey)) {
+        this.errorCache.delete(entryId);
+      }
+    });
+
     if (changed) {
       this.emit(true);
     }
@@ -145,7 +186,15 @@ export class TranslationStore {
       return false;
     }
 
-    if (this.getTranslation(entry.targetLocale, entry.key, entry.textsHash)) {
+    const hasCachedTranslation = Boolean(
+      this.getTranslation(entry.targetLocale, entry.key, entry.textsHash)
+    );
+
+    if (!entry.syncOnly && hasCachedTranslation) {
+      return false;
+    }
+
+    if (entry.syncOnly && this.completed.has(id)) {
       return false;
     }
 
@@ -154,7 +203,9 @@ export class TranslationStore {
     }
 
     this.pending.set(id, entry);
-    this.adjustContextCount(this.pendingByKey, entry.key, 1);
+    if (!entry.syncOnly) {
+      this.adjustContextCount(this.pendingByKey, entry.key, 1);
+    }
     this.scheduleFlush();
     return true;
   };
@@ -240,9 +291,13 @@ export class TranslationStore {
       this.pending.clear();
 
       batch.forEach((entry) => {
-        this.adjustContextCount(this.pendingByKey, entry.key, -1);
+        if (!entry.syncOnly) {
+          this.adjustContextCount(this.pendingByKey, entry.key, -1);
+        }
         this.inFlight.add(translationEntryId(entry));
-        this.adjustContextCount(this.inFlightByKey, entry.key, 1);
+        if (!entry.syncOnly) {
+          this.adjustContextCount(this.inFlightByKey, entry.key, 1);
+        }
       });
       this.emit(false);
 
@@ -252,23 +307,59 @@ export class TranslationStore {
           throw new Error('Invalid translation response');
         }
 
-        const acknowledgedRequestIds = new Set<string>();
+        const successfulRequestIds = new Set<string>();
+        const successfulRequestTriples = new Set<string>();
+        const erroredRequestIds = new Set<string>();
+        const erroredRequestTriples = new Set<string>();
 
-        result.data.forEach(({ locale, key, textsHash, translation }) => {
+        result.data.forEach(({ locale, key, textsHash, translation, contextFingerprint }) => {
           set(this.translations, [locale, key, textsHash], translation);
-          acknowledgedRequestIds.add(`${locale}-${key}-${textsHash}`);
+          successfulRequestTriples.add(
+            translationEntryTriple({
+              targetLocale: locale,
+              key,
+              textsHash,
+            })
+          );
+          successfulRequestIds.add(
+            translationEntryId({
+              targetLocale: locale,
+              key,
+              textsHash,
+              contextFingerprint: contextFingerprint ?? undefined,
+            })
+          );
         });
 
-        result.errors.forEach(({ locale, key, textsHash }) => {
-          this.errorCache.set(`${locale}-${key}-${textsHash}`, Date.now() + ERROR_CACHE_TTL_MS);
-          acknowledgedRequestIds.add(`${locale}-${key}-${textsHash}`);
+        result.errors.forEach(({ locale, key, textsHash, contextFingerprint }) => {
+          erroredRequestTriples.add(
+            translationEntryTriple({
+              targetLocale: locale,
+              key,
+              textsHash,
+            })
+          );
+          const id = translationEntryId({
+            targetLocale: locale,
+            key,
+            textsHash,
+            contextFingerprint: contextFingerprint ?? undefined,
+          });
+          this.errorCache.set(id, Date.now() + ERROR_CACHE_TTL_MS);
+          erroredRequestIds.add(id);
         });
 
         // If the backend does not acknowledge a requested entry at all, treat it
         // as a temporary error to avoid infinite retry loops.
         batch.forEach((entry) => {
           const id = translationEntryId(entry);
-          if (!acknowledgedRequestIds.has(id)) {
+          const triple = translationEntryTriple(entry);
+          if (successfulRequestIds.has(id) || successfulRequestTriples.has(triple)) {
+            this.completed.add(id);
+            return;
+          }
+
+          if (!erroredRequestIds.has(id) && !erroredRequestTriples.has(triple)) {
             this.errorCache.set(id, Date.now() + ERROR_CACHE_TTL_MS);
           }
         });
@@ -288,7 +379,9 @@ export class TranslationStore {
       } finally {
         batch.forEach((entry) => {
           this.inFlight.delete(translationEntryId(entry));
-          this.adjustContextCount(this.inFlightByKey, entry.key, -1);
+          if (!entry.syncOnly) {
+            this.adjustContextCount(this.inFlightByKey, entry.key, -1);
+          }
         });
         this.emit(false);
       }
@@ -316,8 +409,8 @@ export class TranslationStore {
     this.snapshot = {
       version: this.version,
       translations: this.translations,
-      hasPending: this.pending.size > 0,
-      hasInFlight: this.inFlight.size > 0,
+      hasPending: this.pendingByKey.size > 0,
+      hasInFlight: this.inFlightByKey.size > 0,
     };
 
     this.listeners.forEach((listener) => listener());

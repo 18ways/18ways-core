@@ -28,4 +28,115 @@ describe('TranslationStore', () => {
     expect(store.getTranslation('fr-FR', 'gc-key', '["Bye","gc-key"]')).toBeUndefined();
     expect(store.getTranslation('en-GB', 'keep-key', '["Hello","keep-key"]')).toEqual(['Hello']);
   });
+
+  it('syncs cached translations once per context fingerprint without entering loading state', async () => {
+    const fetchTranslations = vi.fn(async (entries) => ({
+      data: entries.map((entry) => ({
+        locale: entry.targetLocale,
+        key: entry.key,
+        textsHash: entry.textsHash,
+        contextFingerprint: entry.contextFingerprint ?? null,
+        translationId: 'group-1',
+        translation: ['Hola'],
+      })),
+      errors: [],
+    }));
+    const store = new TranslationStore({
+      translations: {
+        'es-ES': {
+          cta: {
+            hash_1: ['Hola'],
+          },
+        },
+      },
+      fetchTranslations,
+    });
+
+    expect(
+      store.enqueue({
+        targetLocale: 'es-ES',
+        key: 'cta',
+        textsHash: 'hash_1',
+        texts: ['Hello'],
+        contextFingerprint: 'fingerprint-a',
+        syncOnly: true,
+      })
+    ).toBe(true);
+    expect(store.getSnapshot().hasPending).toBe(false);
+
+    await store.waitForIdle();
+
+    expect(fetchTranslations).toHaveBeenCalledTimes(1);
+    expect(
+      store.enqueue({
+        targetLocale: 'es-ES',
+        key: 'cta',
+        textsHash: 'hash_1',
+        texts: ['Hello'],
+        contextFingerprint: 'fingerprint-a',
+        syncOnly: true,
+      })
+    ).toBe(false);
+    expect(
+      store.enqueue({
+        targetLocale: 'es-ES',
+        key: 'cta',
+        textsHash: 'hash_1',
+        texts: ['Hello'],
+        contextFingerprint: 'fingerprint-b',
+        syncOnly: true,
+      })
+    ).toBe(true);
+
+    await store.waitForIdle();
+
+    expect(fetchTranslations).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears completed sync entries when a context is garbage-collected', async () => {
+    const fetchTranslations = vi.fn(async (entries) => ({
+      data: entries.map((entry) => ({
+        locale: entry.targetLocale,
+        key: entry.key,
+        textsHash: entry.textsHash,
+        contextFingerprint: entry.contextFingerprint ?? null,
+        translationId: 'group-1',
+        translation: ['Hola'],
+      })),
+      errors: [],
+    }));
+    const store = new TranslationStore({
+      translations: {
+        'es-ES': {
+          cta: {
+            hash_1: ['Hola'],
+          },
+        },
+      },
+      fetchTranslations,
+    });
+
+    store.enqueue({
+      targetLocale: 'es-ES',
+      key: 'cta',
+      textsHash: 'hash_1',
+      texts: ['Hello'],
+      contextFingerprint: 'fingerprint-a',
+      syncOnly: true,
+    });
+    await store.waitForIdle();
+
+    store.deleteContextTranslations('cta');
+
+    expect(
+      store.enqueue({
+        targetLocale: 'es-ES',
+        key: 'cta',
+        textsHash: 'hash_1',
+        texts: ['Hello'],
+        contextFingerprint: 'fingerprint-a',
+        syncOnly: true,
+      })
+    ).toBe(true);
+  });
 });

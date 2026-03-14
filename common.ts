@@ -50,6 +50,8 @@ export interface InProgressTranslation {
   texts: string[];
   contextFingerprint?: string;
   contextMetadata?: TranslationContextValue;
+  /** @internal When true, persist context metadata even if translation text is already cached. */
+  syncOnly?: boolean;
 }
 
 export interface FetchTranslationsResult {
@@ -57,10 +59,17 @@ export interface FetchTranslationsResult {
     locale: string;
     key: string;
     textsHash: string;
+    translationId: string;
+    contextFingerprint?: string | null;
     // AES-encrypted translation payloads.
     translation: string[];
   }>;
-  errors: Array<{ locale: string; key: string; textsHash: string }>;
+  errors: Array<{
+    locale: string;
+    key: string;
+    textsHash: string;
+    contextFingerprint?: string | null;
+  }>;
 }
 
 export interface FetchSeedResult {
@@ -394,7 +403,12 @@ export const fetchTranslations = async (
       console.error(e);
       return {
         data: [],
-        errors: toTranslate,
+        errors: toTranslate.map((entry) => ({
+          locale: entry.targetLocale,
+          key: entry.key,
+          textsHash: entry.textsHash,
+          contextFingerprint: entry.contextFingerprint ?? null,
+        })),
       };
     },
   });
