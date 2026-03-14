@@ -139,4 +139,47 @@ describe('TranslationStore', () => {
       })
     ).toBe(true);
   });
+
+  it('error-caches fingerprinted requests when the backend only acknowledges the triple', async () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchTranslations = vi.fn(async () => ({
+      data: [],
+      errors: [
+        {
+          locale: 'es-ES',
+          key: 'cta',
+          textsHash: 'hash_1',
+        },
+      ],
+    }));
+    const store = new TranslationStore({
+      translations: {},
+      fetchTranslations,
+    });
+
+    expect(
+      store.enqueue({
+        targetLocale: 'es-ES',
+        key: 'cta',
+        textsHash: 'hash_1',
+        texts: ['Hello'],
+        contextFingerprint: 'fingerprint-a',
+      })
+    ).toBe(true);
+
+    await store.waitForIdle();
+
+    expect(fetchTranslations).toHaveBeenCalledTimes(1);
+    expect(
+      store.enqueue({
+        targetLocale: 'es-ES',
+        key: 'cta',
+        textsHash: 'hash_1',
+        texts: ['Hello'],
+        contextFingerprint: 'fingerprint-a',
+      })
+    ).toBe(false);
+
+    consoleWarnSpy.mockRestore();
+  });
 });

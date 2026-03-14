@@ -309,8 +309,6 @@ export class TranslationStore {
 
         const successfulRequestIds = new Set<string>();
         const successfulRequestTriples = new Set<string>();
-        const erroredRequestIds = new Set<string>();
-        const erroredRequestTriples = new Set<string>();
 
         result.data.forEach(({ locale, key, textsHash, translation, contextFingerprint }) => {
           set(this.translations, [locale, key, textsHash], translation);
@@ -332,13 +330,6 @@ export class TranslationStore {
         });
 
         result.errors.forEach(({ locale, key, textsHash, contextFingerprint }) => {
-          erroredRequestTriples.add(
-            translationEntryTriple({
-              targetLocale: locale,
-              key,
-              textsHash,
-            })
-          );
           const id = translationEntryId({
             targetLocale: locale,
             key,
@@ -346,7 +337,6 @@ export class TranslationStore {
             contextFingerprint: contextFingerprint ?? undefined,
           });
           this.errorCache.set(id, Date.now() + ERROR_CACHE_TTL_MS);
-          erroredRequestIds.add(id);
         });
 
         // If the backend does not acknowledge a requested entry at all, treat it
@@ -359,9 +349,7 @@ export class TranslationStore {
             return;
           }
 
-          if (!erroredRequestIds.has(id) && !erroredRequestTriples.has(triple)) {
-            this.errorCache.set(id, Date.now() + ERROR_CACHE_TTL_MS);
-          }
+          this.errorCache.set(id, Date.now() + ERROR_CACHE_TTL_MS);
         });
 
         if (result.errors.length) {
