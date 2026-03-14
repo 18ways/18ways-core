@@ -188,6 +188,36 @@ export const recognizeLocale = (value: string | null | undefined): string | null
   return canonical || null;
 };
 
+const normalizeComparableLocale = (locale: string): string =>
+  (recognizeLocale(locale) || '').toLowerCase();
+
+const matchesLocaleSegment = (
+  segment: string,
+  options?: { locale?: string; acceptedLocales?: string[] }
+): boolean => {
+  const recognizedSegment = recognizeLocale(segment);
+  if (!recognizedSegment) {
+    return false;
+  }
+
+  const normalizedSegment = normalizeComparableLocale(recognizedSegment);
+  if (!normalizedSegment) {
+    return false;
+  }
+
+  if (options?.acceptedLocales?.length) {
+    return options.acceptedLocales.some(
+      (locale) => normalizeComparableLocale(locale) === normalizedSegment
+    );
+  }
+
+  if (options?.locale) {
+    return normalizeComparableLocale(options.locale) === normalizedSegment;
+  }
+
+  return true;
+};
+
 const normalizeOrigin = (origin: string): string => origin.replace(/\/$/, '');
 
 export const joinOriginAndPathname = (origin: string, pathname: string): string => {
@@ -203,6 +233,60 @@ export const buildLocalizedPathname = (pathname: string, locale: string): string
   }
 
   return `/${locale}${normalizedPath}`;
+};
+
+export const stripLocalePrefix = (
+  pathname: string,
+  options?: { locale?: string; acceptedLocales?: string[] }
+): string => {
+  const normalizedPathname = normalizePathname(pathname);
+  const segments = normalizedPathname.split('/').filter(Boolean);
+  if (!segments.length) {
+    return '/';
+  }
+
+  if (!matchesLocaleSegment(segments[0], options)) {
+    return normalizedPathname;
+  }
+
+  const remainingSegments = segments.slice(1);
+  return remainingSegments.length ? `/${remainingSegments.join('/')}` : '/';
+};
+
+export const localizePathname = (
+  pathname: string,
+  locale: string,
+  options?: {
+    acceptedLocales?: string[];
+    currentLocale?: string;
+    pathRouting?: WaysPathRoutingConfig;
+  }
+): string => {
+  const recognizedLocale = recognizeLocale(locale);
+  if (!recognizedLocale) {
+    return normalizePathname(pathname);
+  }
+
+  const normalizedPathname = normalizePathname(pathname);
+  const effectivePathRouting = options?.pathRouting;
+  if (!effectivePathRouting) {
+    return normalizedPathname;
+  }
+
+  let basePathname = stripLocalePrefix(normalizedPathname, {
+    locale: options?.currentLocale,
+    acceptedLocales: options?.acceptedLocales,
+  });
+
+  if (basePathname === normalizedPathname) {
+    basePathname = stripLocalePrefix(normalizedPathname, { locale: recognizedLocale });
+  }
+
+  if (!isPathRoutingEnabled(basePathname, effectivePathRouting)) {
+    return basePathname;
+  }
+
+  return buildLocalizedPathname(basePathname, recognizedLocale);
 };
 
 const localeMapFromSupported = (supportedLocales: string[]): Map<string, string> => {

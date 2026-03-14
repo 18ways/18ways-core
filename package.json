@@ -14,6 +14,14 @@
       "types": "./common.ts",
       "import": "./common.ts"
     },
+    "./client-accepted-locales": {
+      "types": "./client-accepted-locales.ts",
+      "import": "./client-accepted-locales.ts"
+    },
+    "./client-locale-coordination": {
+      "types": "./client-locale-coordination.ts",
+      "import": "./client-locale-coordination.ts"
+    },
     "./crypto": {
       "types": "./crypto.ts",
       "import": "./crypto.ts"
@@ -37,6 +45,10 @@
     "./object-utils": {
       "types": "./object-utils.ts",
       "import": "./object-utils.ts"
+    },
+    "./path-locale-driver": {
+      "types": "./path-locale-driver.ts",
+      "import": "./path-locale-driver.ts"
     },
     "./translation-store": {
       "types": "./translation-store.ts",
