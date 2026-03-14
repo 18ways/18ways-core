@@ -4,18 +4,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readAcceptedLocalesFromWindow } from '../client-accepted-locales';
 
 afterEach(() => {
-  delete (window as Window & { __18WAYS_ACCEPTED_LOCALES__?: string[] })
-    .__18WAYS_ACCEPTED_LOCALES__;
+  delete window.__18WAYS_ACCEPTED_LOCALES__;
 });
 
 describe('readAcceptedLocalesFromWindow', () => {
   it('returns canonicalized unique accepted locales from the injected window state', () => {
-    (window as Window & { __18WAYS_ACCEPTED_LOCALES__?: string[] }).__18WAYS_ACCEPTED_LOCALES__ = [
-      'es-es',
-      'en-GB',
-      'es-ES',
-      'invalid locale',
-    ];
+    window.__18WAYS_ACCEPTED_LOCALES__ = ['es-es', 'en-GB', 'es-ES', 'invalid locale'];
 
     expect(readAcceptedLocalesFromWindow()).toEqual(['es-ES', 'en-GB']);
   });
