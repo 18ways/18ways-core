@@ -6,6 +6,12 @@ export interface Translations {
   [key: string]: string[] | Translations;
 }
 
+type WaysWindow = Window &
+  typeof globalThis & {
+    __18WAYS_IN_MEMORY_TRANSLATIONS__?: Translations;
+    __18WAYS_ACCEPTED_LOCALES__?: string[];
+  };
+
 export type Fetcher = typeof fetch;
 export type _RequestInitLike = RequestInit & Record<string, unknown>;
 export type _RequestInitDecorator = (input: {
@@ -275,10 +281,11 @@ export const fetchAcceptedLocales = async (
 
 export const getInMemoryTranslations = () => {
   if (typeof window !== 'undefined') {
-    if (!window.__18WAYS_IN_MEMORY_TRANSLATIONS__) {
-      window.__18WAYS_IN_MEMORY_TRANSLATIONS__ = {};
+    const waysWindow = window as WaysWindow;
+    if (!waysWindow.__18WAYS_IN_MEMORY_TRANSLATIONS__) {
+      waysWindow.__18WAYS_IN_MEMORY_TRANSLATIONS__ = {};
     }
-    return window.__18WAYS_IN_MEMORY_TRANSLATIONS__;
+    return waysWindow.__18WAYS_IN_MEMORY_TRANSLATIONS__;
   }
 
   if (!serverCache) {
