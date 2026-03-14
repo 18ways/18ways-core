@@ -26,6 +26,10 @@
       "types": "./i18n-shared.ts",
       "import": "./i18n-shared.ts"
     },
+    "./locale-drivers": {
+      "types": "./locale-drivers.ts",
+      "import": "./locale-drivers.ts"
+    },
     "./locale-engine": {
       "types": "./locale-engine.ts",
       "import": "./locale-engine.ts"

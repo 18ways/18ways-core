@@ -2,6 +2,7 @@ export * from './common';
 export * from './crypto';
 export * from './cookie-utils';
 export * from './i18n-shared';
+export * from './locale-drivers';
 export * from './locale-engine';
 export * from './object-utils';
 export * from './translation-store';
