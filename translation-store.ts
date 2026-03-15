@@ -112,6 +112,10 @@ export class TranslationStore {
 
   isInFlight = (id: string): boolean => this.inFlight.has(id);
 
+  hasCompletedEntry = (
+    entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textsHash' | 'contextFingerprint'>
+  ): boolean => this.completed.has(translationEntryId(entry));
+
   isErrorCached = (id: string): boolean => {
     const expiry = this.errorCache.get(id);
     return typeof expiry === 'number' && Date.now() < expiry;

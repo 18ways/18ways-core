@@ -68,6 +68,14 @@ describe('TranslationStore', () => {
 
     expect(fetchTranslations).toHaveBeenCalledTimes(1);
     expect(
+      store.hasCompletedEntry({
+        targetLocale: 'es-ES',
+        key: 'cta',
+        textsHash: 'hash_1',
+        contextFingerprint: 'fingerprint-a',
+      })
+    ).toBe(true);
+    expect(
       store.enqueue({
         targetLocale: 'es-ES',
         key: 'cta',
