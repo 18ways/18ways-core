@@ -66,6 +66,10 @@
       "types": "./engine.ts",
       "import": "./engine.ts"
     },
+    "./rich-text": {
+      "types": "./rich-text.ts",
+      "import": "./rich-text.ts"
+    },
     "./parsers/ways-parser": {
       "types": "./parsers/ways-parser.ts",
       "import": "./parsers/ways-parser.ts"
