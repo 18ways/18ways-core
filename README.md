@@ -18,7 +18,7 @@ npm install @18ways/core
 import { create18waysEngine } from '@18ways/core/engine';
 
 const ways = create18waysEngine({
-  apiKey: 'pk_live_GET_ME_FROM_YOUR_DASHBOARD_...',
+  apiKey: 'YOUR_18WAYS_PUBLIC_API_KEY',
   locale: 'fr-FR',
   baseLocale: 'en-GB',
   context: 'app',
@@ -26,7 +26,9 @@ const ways = create18waysEngine({
 
 const hello = await ways.t('Hello world');
 ways.setLocale('de-DE');
-const cta = await ways.t('Pay now', { context: 'checkout.button' });
+const cta = await ways.t('Pay now', {
+  context: 'checkout.button',
+});
 ```
 
 Docs: [18ways.com/docs](https://18ways.com/docs)

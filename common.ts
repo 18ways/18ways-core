@@ -92,6 +92,7 @@ const DEFAULT_18WAYS_API_URL = 'https://internal.18ways.com/api';
 const DEFAULT_LOCALE = 'en-GB';
 const DEFAULT_ORIGIN = 'http://localhost:3000';
 const DEFAULT_ACCEPTED_LOCALES_CACHE_TTL_SECONDS = 60;
+const PLACEHOLDER_API_KEY = 'YOUR_18WAYS_PUBLIC_API_KEY';
 
 let apiKey: string | undefined;
 let apiUrl: string | undefined;
@@ -101,6 +102,7 @@ let customRequestInitDecorator: _RequestInitDecorator | undefined;
 let serverCache: Translations | null = null;
 const DEFAULT_CACHE_TTL_SECONDS = 10 * 60;
 let cacheTtlSeconds = DEFAULT_CACHE_TTL_SECONDS;
+let hasWarnedAboutPlaceholderApiKey = false;
 
 const normalizeOrigin = (origin: string): string => origin.replace(/\/$/, '');
 
@@ -120,12 +122,26 @@ const joinApiBaseAndPath = (base: string, path: string): string => {
   return `${normalizedBase}${path}`;
 };
 
+const warnIfPlaceholderApiKey = (candidate?: string): void => {
+  if (!candidate || hasWarnedAboutPlaceholderApiKey) {
+    return;
+  }
+
+  if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
+    if (candidate === PLACEHOLDER_API_KEY) {
+      hasWarnedAboutPlaceholderApiKey = true;
+      console.error('[18ways] Please specify your actual API key, not the placeholder value');
+    }
+  }
+};
+
 const resolveApiKey = (explicitApiKey?: string): string | undefined => {
   if (typeof explicitApiKey !== 'string') {
     return undefined;
   }
 
   const trimmed = explicitApiKey.trim();
+  warnIfPlaceholderApiKey(trimmed);
   return trimmed ? trimmed : undefined;
 };
 
@@ -307,9 +323,10 @@ export const inMemoryErrorCache: { [key: string]: any } = {};
 export const init = (keyOrOptions: string | InitOptions, rawOptions?: InitOptions): void => {
   const options =
     typeof keyOrOptions === 'string' ? { key: keyOrOptions, ...(rawOptions || {}) } : keyOrOptions;
+  const resolvedApiKey = resolveApiKey(options.key);
 
-  if (options.key) {
-    apiKey = options.key;
+  if (resolvedApiKey) {
+    apiKey = resolvedApiKey;
   } else {
     throw new Error('Cannot init without an API key');
   }
