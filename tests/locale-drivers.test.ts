@@ -4,6 +4,7 @@ import {
   SessionCookieDriver,
   createLocaleDrivers,
   createLocaleEngine,
+  readPreferredLocalesFromAcceptLanguageHeader,
   type LocaleDriverContext,
 } from '../locale-drivers';
 import { WAYS_LOCALE_COOKIE_NAME } from '../i18n-shared';
@@ -47,6 +48,68 @@ describe('createLocaleEngine', () => {
 
     expect(resolution.locale).toBe('en-GB');
     expect(resolution.resolvedBy).toBe('path');
+  });
+
+  it('walks the accept-language ladder until it finds a supported locale', async () => {
+    const engine = createLocaleEngine<LocaleDriverContext>({
+      baseLocale: 'en-GB',
+      acceptedLocales: ['fr-FR', 'en-GB'],
+    });
+
+    const resolution = await engine.resolve({
+      baseLocale: 'en-GB',
+      acceptedLocales: ['fr-FR', 'en-GB'],
+      acceptLanguageHeader: 'es-MX;q=1, fr-CA;q=0.9, en;q=0.8',
+    });
+
+    expect(resolution.locale).toBe('fr-FR');
+    expect(resolution.resolvedBy).toBe('browser-preference');
+  });
+
+  it('prefers an exact accept-language match before any fallback match', async () => {
+    const engine = createLocaleEngine<LocaleDriverContext>({
+      baseLocale: 'en-GB',
+      acceptedLocales: ['fr-FR', 'en-GB'],
+    });
+
+    const resolution = await engine.resolve({
+      baseLocale: 'en-GB',
+      acceptedLocales: ['fr-FR', 'en-GB'],
+      acceptLanguageHeader: 'fr-FR;q=0.2, en-US;q=0.9',
+    });
+
+    expect(resolution.locale).toBe('fr-FR');
+    expect(resolution.resolvedBy).toBe('browser-preference');
+  });
+
+  it('falls back to the base locale only after exact and fallback matching fail', async () => {
+    const engine = createLocaleEngine<LocaleDriverContext>({
+      baseLocale: 'en-GB',
+      acceptedLocales: ['fr-FR'],
+    });
+
+    const resolution = await engine.resolve({
+      baseLocale: 'en-GB',
+      acceptedLocales: ['fr-FR'],
+      acceptLanguageHeader: 'en-GB;q=1, ja-JP;q=0.9',
+    });
+
+    expect(resolution.locale).toBe('en-GB');
+    expect(resolution.resolvedBy).toBe('base-locale');
+  });
+});
+
+describe('readPreferredLocalesFromAcceptLanguageHeader', () => {
+  it('orders recognized locales by q descending and keeps header order for ties', () => {
+    expect(
+      readPreferredLocalesFromAcceptLanguageHeader(
+        'fr-FR;q=0.2, en-US;q=0.9, es-ES;q=0.9, en-US;q=0.7'
+      )
+    ).toEqual(['en-US', 'es-ES', 'fr-FR']);
+  });
+
+  it('skips q=0 and wildcard entries', () => {
+    expect(readPreferredLocalesFromAcceptLanguageHeader('*, fr-FR;q=0, en;q=0.8')).toEqual(['en']);
   });
 });
 

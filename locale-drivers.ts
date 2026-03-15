@@ -2,6 +2,7 @@ import { readCookieFromDocument, writeCookieToDocument } from './cookie-utils';
 import {
   WAYS_LOCALE_COOKIE_NAME,
   canonicalizeLocale,
+  findExactSupportedLocale,
   findSupportedLocale,
   recognizeLocale,
 } from './i18n-shared';
@@ -51,53 +52,146 @@ export const BaseLocaleDriver: LocaleDriver<LocaleDriverContext> = {
   handleListeners: () => {},
 };
 
-const readBrowserPreferredLocale = (): string | null => {
-  if (typeof navigator === 'undefined') {
+const recognizePreferredLocales = (candidates: string[]): string[] => {
+  const uniqueLocales: string[] = [];
+  const seenLocales = new Set<string>();
+
+  for (const candidate of candidates) {
+    const recognized = recognizeLocale(candidate);
+    if (!recognized) {
+      continue;
+    }
+
+    const key = recognized.toLowerCase();
+    if (seenLocales.has(key)) {
+      continue;
+    }
+
+    seenLocales.add(key);
+    uniqueLocales.push(recognized);
+  }
+
+  return uniqueLocales;
+};
+
+const resolvePreferredLocaleFromCandidates = (
+  candidates: string[],
+  context: Pick<LocaleDriverContext, 'acceptedLocales'>
+): string | null => {
+  const recognizedCandidates = recognizePreferredLocales(candidates);
+  if (!recognizedCandidates.length) {
     return null;
   }
 
-  const candidates = [...(navigator.languages || []), navigator.language].filter(Boolean);
-  for (const candidate of candidates) {
-    const locale = recognizeLocale(candidate);
-    if (locale) {
-      return locale;
+  if (!context.acceptedLocales?.length) {
+    return recognizedCandidates[0] || null;
+  }
+
+  for (const candidate of recognizedCandidates) {
+    const exact = findExactSupportedLocale(candidate, context.acceptedLocales);
+    if (exact) {
+      return exact;
+    }
+  }
+
+  for (const candidate of recognizedCandidates) {
+    const fallback = findSupportedLocale(candidate, context.acceptedLocales);
+    if (fallback) {
+      return fallback;
     }
   }
 
   return null;
 };
 
-const parseAcceptLanguageLocale = (header: string | null | undefined): string | null => {
-  if (!header) {
-    return null;
+const readBrowserPreferredLocales = (): string[] => {
+  if (typeof navigator === 'undefined') {
+    return [];
   }
 
-  const tokens = header
-    .split(',')
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .map((token) => token.split(';')[0]?.trim())
-    .filter((token): token is string => Boolean(token));
+  return [...(navigator.languages || []), navigator.language].filter(
+    (candidate): candidate is string => Boolean(candidate)
+  );
+};
 
-  for (const token of tokens) {
-    const recognized = recognizeLocale(token);
-    if (recognized) {
-      return recognized;
+const parseAcceptLanguageQuality = (parameters: string[]): number => {
+  for (const parameter of parameters) {
+    const qualityMatch = parameter.match(/^q\s*=\s*(.+)$/i);
+    if (!qualityMatch) {
+      continue;
     }
+
+    const parsed = Number.parseFloat(qualityMatch[1]?.trim() || '');
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+
+    return Math.min(1, Math.max(0, parsed));
   }
 
-  return null;
+  return 1;
+};
+
+export const readPreferredLocalesFromAcceptLanguageHeader = (
+  header: string | null | undefined
+): string[] => {
+  if (!header) {
+    return [];
+  }
+
+  const rankedLocales = header
+    .split(',')
+    .map((token, index) => ({ token: token.trim(), index }))
+    .filter(({ token }) => Boolean(token))
+    .flatMap(({ token, index }) => {
+      const parts = token.split(';').map((part) => part.trim());
+      const localeToken = parts[0];
+      if (!localeToken || localeToken === '*') {
+        return [];
+      }
+
+      const recognized = recognizeLocale(localeToken);
+      if (!recognized) {
+        return [];
+      }
+
+      const quality = parseAcceptLanguageQuality(parts.slice(1));
+      if (quality <= 0) {
+        return [];
+      }
+
+      return [{ locale: recognized, quality, index }];
+    })
+    .sort((left, right) => right.quality - left.quality || left.index - right.index);
+
+  const uniqueLocales: string[] = [];
+  const seenLocales = new Set<string>();
+
+  for (const { locale } of rankedLocales) {
+    const key = locale.toLowerCase();
+    if (seenLocales.has(key)) {
+      continue;
+    }
+
+    seenLocales.add(key);
+    uniqueLocales.push(locale);
+  }
+
+  return uniqueLocales;
 };
 
 export const BrowserPreferenceDriver: LocaleDriver<LocaleDriverContext> = {
   name: 'browser-preference',
   getLocale: (context) => {
-    const fromHeader = parseAcceptLanguageLocale(context.acceptLanguageHeader);
+    const fromHeader = resolvePreferredLocaleFromCandidates(
+      readPreferredLocalesFromAcceptLanguageHeader(context.acceptLanguageHeader),
+      context
+    );
     if (fromHeader) {
       return fromHeader;
     }
 
-    return readBrowserPreferredLocale();
+    return resolvePreferredLocaleFromCandidates(readBrowserPreferredLocales(), context);
   },
   setLocale: () => {},
   handleListeners: (_context, sync) => {
@@ -119,7 +213,7 @@ export const BrowserPreferenceDriver: LocaleDriver<LocaleDriverContext> = {
     };
 
     const handleLanguageChange = () => {
-      const locale = readBrowserPreferredLocale();
+      const locale = resolvePreferredLocaleFromCandidates(readBrowserPreferredLocales(), _context);
       if (!locale) {
         return;
       }
