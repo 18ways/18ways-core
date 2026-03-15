@@ -14,6 +14,10 @@
       "types": "./common.ts",
       "import": "./common.ts"
     },
+    "./context-fingerprint": {
+      "types": "./context-fingerprint.ts",
+      "import": "./context-fingerprint.ts"
+    },
     "./client-accepted-locales": {
       "types": "./client-accepted-locales.ts",
       "import": "./client-accepted-locales.ts"

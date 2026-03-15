@@ -1,5 +1,6 @@
 import set from 'set-value';
 import type { FetchTranslationsResult, InProgressTranslation, Translations } from './common';
+import { normalizeTranslationContextFingerprint } from './context-fingerprint';
 import { deepMerge, getPath } from './object-utils';
 
 export interface TranslationStoreSnapshot {
@@ -20,15 +21,6 @@ type FetchTranslationsFn = (
 
 const ERROR_CACHE_TTL_MS = 1000 * 60;
 
-const normalizeContextFingerprint = (value?: string | null): string => {
-  if (typeof value !== 'string') {
-    return '';
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : '';
-};
-
 const translationEntryTriple = (
   entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textsHash'>
 ) => JSON.stringify([entry.targetLocale, entry.key, entry.textsHash]);
@@ -40,7 +32,7 @@ export const translationEntryId = (
     entry.targetLocale,
     entry.key,
     entry.textsHash,
-    normalizeContextFingerprint(entry.contextFingerprint),
+    normalizeTranslationContextFingerprint(entry.contextFingerprint),
   ]);
 
 const entryMatchesContextKey = (entryId: string, contextKey: string): boolean => {
