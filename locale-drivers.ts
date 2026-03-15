@@ -74,6 +74,8 @@ const recognizePreferredLocales = (candidates: string[]): string[] => {
   return uniqueLocales;
 };
 
+const isLanguageOnlyLocale = (locale: string): boolean => !locale.includes('-');
+
 const resolvePreferredLocaleFromCandidates = (
   candidates: string[],
   context: Pick<LocaleDriverContext, 'acceptedLocales'>
@@ -88,13 +90,25 @@ const resolvePreferredLocaleFromCandidates = (
   }
 
   for (const candidate of recognizedCandidates) {
-    const exact = findExactSupportedLocale(candidate, context.acceptedLocales);
-    if (exact) {
-      return exact;
+    if (isLanguageOnlyLocale(candidate)) {
+      const directLanguageMatch = findSupportedLocale(candidate, context.acceptedLocales);
+      if (directLanguageMatch) {
+        return directLanguageMatch;
+      }
+      continue;
+    }
+
+    const exactTagMatch = findExactSupportedLocale(candidate, context.acceptedLocales);
+    if (exactTagMatch) {
+      return exactTagMatch;
     }
   }
 
   for (const candidate of recognizedCandidates) {
+    if (isLanguageOnlyLocale(candidate)) {
+      continue;
+    }
+
     const fallback = findSupportedLocale(candidate, context.acceptedLocales);
     if (fallback) {
       return fallback;
@@ -194,7 +208,7 @@ export const BrowserPreferenceDriver: LocaleDriver<LocaleDriverContext> = {
     return resolvePreferredLocaleFromCandidates(readBrowserPreferredLocales(), context);
   },
   setLocale: () => {},
-  handleListeners: (_context, sync) => {
+  handleListeners: (context, sync) => {
     if (typeof window === 'undefined') {
       return;
     }
@@ -213,7 +227,7 @@ export const BrowserPreferenceDriver: LocaleDriver<LocaleDriverContext> = {
     };
 
     const handleLanguageChange = () => {
-      const locale = resolvePreferredLocaleFromCandidates(readBrowserPreferredLocales(), _context);
+      const locale = resolvePreferredLocaleFromCandidates(readBrowserPreferredLocales(), context);
       if (!locale) {
         return;
       }

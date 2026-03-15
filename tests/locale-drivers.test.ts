@@ -50,7 +50,7 @@ describe('createLocaleEngine', () => {
     expect(resolution.resolvedBy).toBe('path');
   });
 
-  it('walks the accept-language ladder until it finds a supported locale', async () => {
+  it('treats language-only ranges as direct matches before regional fallbacks', async () => {
     const engine = createLocaleEngine<LocaleDriverContext>({
       baseLocale: 'en-GB',
       acceptedLocales: ['fr-FR', 'en-GB'],
@@ -62,7 +62,7 @@ describe('createLocaleEngine', () => {
       acceptLanguageHeader: 'es-MX;q=1, fr-CA;q=0.9, en;q=0.8',
     });
 
-    expect(resolution.locale).toBe('fr-FR');
+    expect(resolution.locale).toBe('en-GB');
     expect(resolution.resolvedBy).toBe('browser-preference');
   });
 
@@ -76,6 +76,38 @@ describe('createLocaleEngine', () => {
       baseLocale: 'en-GB',
       acceptedLocales: ['fr-FR', 'en-GB'],
       acceptLanguageHeader: 'fr-FR;q=0.2, en-US;q=0.9',
+    });
+
+    expect(resolution.locale).toBe('fr-FR');
+    expect(resolution.resolvedBy).toBe('browser-preference');
+  });
+
+  it('prefers a language-only direct match over a lower-q later exact locale', async () => {
+    const engine = createLocaleEngine<LocaleDriverContext>({
+      baseLocale: 'en-GB',
+      acceptedLocales: ['fr-FR', 'en-GB'],
+    });
+
+    const resolution = await engine.resolve({
+      baseLocale: 'en-GB',
+      acceptedLocales: ['fr-FR', 'en-GB'],
+      acceptLanguageHeader: 'fr-CA;q=1, en;q=0.9, fr-FR;q=0.8',
+    });
+
+    expect(resolution.locale).toBe('en-GB');
+    expect(resolution.resolvedBy).toBe('browser-preference');
+  });
+
+  it('uses regional fallbacks when no exact or generic language match exists', async () => {
+    const engine = createLocaleEngine<LocaleDriverContext>({
+      baseLocale: 'en-GB',
+      acceptedLocales: ['fr-FR', 'en-GB'],
+    });
+
+    const resolution = await engine.resolve({
+      baseLocale: 'en-GB',
+      acceptedLocales: ['fr-FR', 'en-GB'],
+      acceptLanguageHeader: 'es-MX;q=1, fr-CA;q=0.9, de-DE;q=0.8',
     });
 
     expect(resolution.locale).toBe('fr-FR');
