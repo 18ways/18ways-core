@@ -32,6 +32,13 @@ interface InitOptions {
   _requestInitDecorator?: _RequestInitDecorator;
 }
 
+export type SnapshotTranslationEntry = {
+  key: string;
+  textHash: string;
+  translationId: string;
+  contextFingerprint?: string | null;
+};
+
 export interface TranslationContextValue {
   name: string;
   label: string;
@@ -90,6 +97,7 @@ export interface FetchTranslationsResult {
     textHash: string;
     contextFingerprint?: string | null;
   }>;
+  snapshotRequestTranslationIds?: string[];
 }
 
 export interface FetchSeedResult {
@@ -99,6 +107,8 @@ export interface FetchSeedResult {
     wordsRetrieved: number;
     translationsRetrieved: number;
   };
+  translationEntries?: SnapshotTranslationEntry[];
+  snapshotRequestTranslationIds?: string[];
 }
 
 export interface FetchConfigResult {
@@ -106,6 +116,40 @@ export interface FetchConfigResult {
   total: number;
   translationFallback: TranslationFallbackConfig;
 }
+
+export type RuntimeNetworkEvent =
+  | {
+      type: 'seed';
+      targetLocale: string;
+      keys: string[];
+      result: FetchSeedResult;
+    }
+  | {
+      type: 'translate';
+      request: InProgressTranslation[];
+      result: FetchTranslationsResult;
+    };
+
+const runtimeNetworkListeners = new Set<(event: RuntimeNetworkEvent) => void>();
+
+export const subscribeRuntimeNetworkEvents = (
+  listener: (event: RuntimeNetworkEvent) => void
+): (() => void) => {
+  runtimeNetworkListeners.add(listener);
+  return () => {
+    runtimeNetworkListeners.delete(listener);
+  };
+};
+
+const emitRuntimeNetworkEvent = (event: RuntimeNetworkEvent): void => {
+  runtimeNetworkListeners.forEach((listener) => {
+    try {
+      listener(event);
+    } catch (error) {
+      console.error('[18ways] runtime network event listener failed:', error);
+    }
+  });
+};
 
 interface FetchXOptions {
   url: string;
@@ -627,10 +671,12 @@ export const fetchTranslations = async (
   toTranslate: InProgressTranslation[]
 ): Promise<FetchTranslationsResult> => {
   if (isDemoApiKey(resolveApiKey(apiKey))) {
-    return createDemoTranslationResult(toTranslate);
+    const result = createDemoTranslationResult(toTranslate);
+    emitRuntimeNetworkEvent({ type: 'translate', request: toTranslate, result });
+    return result;
   }
 
-  return fetchX<FetchTranslationsResult>({
+  const result = await fetchX<FetchTranslationsResult>({
     url: '/translate',
     method: 'POST',
     payload: { payload: toTranslate },
@@ -647,11 +693,13 @@ export const fetchTranslations = async (
       };
     },
   });
+  emitRuntimeNetworkEvent({ type: 'translate', request: toTranslate, result });
+  return result;
 };
 
 export const fetchSeed = async (keys: string[], targetLocale: string): Promise<FetchSeedResult> => {
   if (isDemoApiKey(resolveApiKey(apiKey))) {
-    return {
+    const result = {
       data: {},
       errors: [],
       usage: {
@@ -659,9 +707,11 @@ export const fetchSeed = async (keys: string[], targetLocale: string): Promise<F
         translationsRetrieved: 0,
       },
     };
+    emitRuntimeNetworkEvent({ type: 'seed', targetLocale, keys, result });
+    return result;
   }
 
-  return fetchX<FetchSeedResult>({
+  const result = await fetchX<FetchSeedResult>({
     url: '/seed',
     method: 'POST',
     payload: { keys, targetLocale },
@@ -673,6 +723,8 @@ export const fetchSeed = async (keys: string[], targetLocale: string): Promise<F
       };
     },
   });
+  emitRuntimeNetworkEvent({ type: 'seed', targetLocale, keys, result });
+  return result;
 };
 
 export interface Language {
