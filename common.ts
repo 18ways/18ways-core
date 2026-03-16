@@ -1,5 +1,5 @@
 import { generateHashIdV2 } from './crypto';
-import { canonicalizeLocale, findSupportedLocale } from './i18n-shared';
+import { canonicalizeLocale } from './i18n-shared';
 
 export interface Translations {
   // Leaf arrays store encrypted translation payload strings.
@@ -163,6 +163,41 @@ const parseLocalesFromApiResponse = (data: any): string[] => {
   return Array.from(new Set(locales.map(canonicalizeLocale).filter(Boolean)));
 };
 
+const normalizeAcceptedLocaleList = (
+  locales: ReadonlyArray<string | null | undefined> = []
+): string[] => {
+  return Array.from(
+    new Set(locales.map((locale) => canonicalizeLocale(locale || '')).filter(Boolean))
+  );
+};
+
+export const ensureBaseLocaleAccepted = (
+  baseLocale?: string | null,
+  locales: string[] = []
+): string[] => {
+  const normalizedBaseLocale = baseLocale ? canonicalizeLocale(baseLocale) : '';
+  const normalizedLocales = normalizeAcceptedLocaleList(locales);
+
+  if (!normalizedBaseLocale) {
+    return normalizedLocales;
+  }
+
+  return [
+    normalizedBaseLocale,
+    ...normalizedLocales.filter((locale) => locale !== normalizedBaseLocale),
+  ];
+};
+
+export const resolveAcceptedLocales = (
+  baseLocale?: string | null,
+  ...localeSources: Array<ReadonlyArray<string | null | undefined> | null | undefined>
+): string[] => {
+  return ensureBaseLocaleAccepted(
+    baseLocale,
+    normalizeAcceptedLocaleList(localeSources.flatMap((locales) => locales || []))
+  );
+};
+
 export const resolveOrigin = (input: {
   explicitOrigin?: string | null;
   host?: string | null;
@@ -278,18 +313,7 @@ export const fetchAcceptedLocales = async (
 
     const data = await response.json();
     const fetchedLocales = parseLocalesFromApiResponse(data);
-    const normalizedFallbackLocale = findSupportedLocale(defaultLocale, fetchedLocales);
-
-    const locales = fetchedLocales.length
-      ? Array.from(
-          new Set(
-            (normalizedFallbackLocale
-              ? [normalizedFallbackLocale, ...fetchedLocales]
-              : fetchedLocales
-            ).filter(Boolean)
-          )
-        )
-      : [defaultLocale];
+    const locales = ensureBaseLocaleAccepted(defaultLocale, fetchedLocales);
 
     return locales;
   } catch (error) {

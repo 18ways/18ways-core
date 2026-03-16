@@ -26,6 +26,16 @@ describe('i18n pathname localization', () => {
     ).toBe('/ja-JP');
   });
 
+  it('still strips the current locale prefix when accepted locales omit that exact locale', () => {
+    expect(
+      localizePathname('/en-GB', 'ja-JP', {
+        acceptedLocales: ['en-US', 'ja-JP'],
+        currentLocale: 'en-GB',
+        pathRouting: PATH_ROUTING,
+      })
+    ).toBe('/ja-JP');
+  });
+
   it('preserves non-locale path segments', () => {
     expect(
       localizePathname('/japan/travel', 'ja-JP', {

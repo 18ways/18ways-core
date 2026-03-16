@@ -205,14 +205,17 @@ const matchesLocaleSegment = (
     return false;
   }
 
+  if (options?.locale) {
+    const normalizedLocale = normalizeComparableLocale(options.locale);
+    if (normalizedLocale && normalizedLocale === normalizedSegment) {
+      return true;
+    }
+  }
+
   if (options?.acceptedLocales?.length) {
     return options.acceptedLocales.some(
       (locale) => normalizeComparableLocale(locale) === normalizedSegment
     );
-  }
-
-  if (options?.locale) {
-    return normalizeComparableLocale(options.locale) === normalizedSegment;
   }
 
   return true;
@@ -273,13 +276,27 @@ export const localizePathname = (
     return normalizedPathname;
   }
 
-  let basePathname = stripLocalePrefix(normalizedPathname, {
-    locale: options?.currentLocale,
-    acceptedLocales: options?.acceptedLocales,
-  });
+  let basePathname = normalizedPathname;
+
+  if (options?.acceptedLocales?.length) {
+    const pathInfo = extractLocalePrefix(normalizedPathname, options.acceptedLocales);
+    if (pathInfo.unlocalizedPathname !== normalizedPathname) {
+      basePathname = pathInfo.unlocalizedPathname;
+    }
+  }
+
+  if (basePathname === normalizedPathname && options?.currentLocale) {
+    basePathname = stripLocalePrefix(normalizedPathname, {
+      locale: options.currentLocale,
+      acceptedLocales: [options.currentLocale],
+    });
+  }
 
   if (basePathname === normalizedPathname) {
-    basePathname = stripLocalePrefix(normalizedPathname, { locale: recognizedLocale });
+    basePathname = stripLocalePrefix(normalizedPathname, {
+      locale: recognizedLocale,
+      acceptedLocales: [recognizedLocale],
+    });
   }
 
   if (!isPathRoutingEnabled(basePathname, effectivePathRouting)) {

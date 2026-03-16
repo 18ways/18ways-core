@@ -89,14 +89,14 @@ describe('fetchAcceptedLocales', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('does not inject an unsupported fallback locale into the accepted-locale list', async () => {
+  it('always prepends the base locale to the accepted-locale list', async () => {
     const locales = await fetchAcceptedLocales('en-US', {
       forceRefresh: true,
       origin: 'https://18ways.com',
       apiKey: 'test-public-api-key',
     });
 
-    expect(locales).toEqual(['en-GB', 'ja-JP']);
+    expect(locales).toEqual(['en-US', 'en-GB', 'ja-JP']);
   });
 
   it('falls back to the default locale without fetching when no api key is available', async () => {

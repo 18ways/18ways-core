@@ -1,4 +1,5 @@
-import { canonicalizeLocale, recognizeLocale } from './i18n-shared';
+import { resolveAcceptedLocales } from './common';
+import { recognizeLocale } from './i18n-shared';
 
 export const readAcceptedLocalesFromWindow = (): string[] => {
   if (typeof window === 'undefined') {
@@ -9,12 +10,10 @@ export const readAcceptedLocalesFromWindow = (): string[] => {
     return [];
   }
 
-  return Array.from(
-    new Set(
-      window.__18WAYS_ACCEPTED_LOCALES__
-        .map((locale) => recognizeLocale(locale))
-        .filter((locale): locale is string => Boolean(locale))
-        .map((locale) => canonicalizeLocale(locale))
-    )
+  return resolveAcceptedLocales(
+    undefined,
+    window.__18WAYS_ACCEPTED_LOCALES__
+      .map((locale) => recognizeLocale(locale))
+      .filter((locale): locale is string => Boolean(locale))
   );
 };
