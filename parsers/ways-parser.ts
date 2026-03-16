@@ -119,6 +119,10 @@ export const formatWaysParser = (
       if (val === undefined) return `{${expression}}`;
 
       // For bare placeholders (`{foo}`), infer common formatters from runtime value shape.
+      if (typeof val === 'number') {
+        const formattedNumber = formatNumber(locale, val);
+        return formattedNumber ?? String(val);
+      }
       if (val instanceof Date) {
         const formattedDate = formatDateTime(locale, val, { dateStyle: 'medium' });
         return formattedDate ?? String(val);
@@ -134,9 +138,12 @@ export const formatWaysParser = (
     const formatType = parts[1];
     if (!formatType) return `{${expression}}`;
 
-    if (formatType === 'number') {
+    if (formatType === 'number' || formatType === 'percent') {
       const raw = getPath(vars, arg);
       const options = parseNamedOptions(parts.slice(2)) as Intl.NumberFormatOptions;
+      if (!options.style && formatType === 'percent') {
+        options.style = 'percent';
+      }
       if (!options.style && options.currency) {
         options.style = 'currency';
       }
