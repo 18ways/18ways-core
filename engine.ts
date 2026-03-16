@@ -11,7 +11,7 @@ import {
 } from './common';
 import { decryptTranslationValues } from './crypto';
 import { canonicalizeLocale } from './i18n-shared';
-import { formatWaysParser } from './parsers/ways-parser';
+import { formatWaysParser, isRuntimeOnlyWaysMessage } from './parsers/ways-parser';
 import { TranslationStore } from './translation-store';
 
 const DEFAULT_BASE_LOCALE = 'en-GB';
@@ -109,7 +109,7 @@ export class WaysEngine {
     const texts = [sourceText];
     const textsHash = generateHashId([...texts, contextKey]);
 
-    if (baseLocale === targetLocale) {
+    if (baseLocale === targetLocale || isRuntimeOnlyWaysMessage(sourceText)) {
       return formatWithVars(sourceText, options.vars, targetLocale);
     }
 

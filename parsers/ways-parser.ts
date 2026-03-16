@@ -46,67 +46,161 @@ const isMoneyLikeValue = (value: unknown): boolean => {
   return candidate.amount !== undefined && typeof candidate.currency === 'string';
 };
 
+const splitTopLevel = (value: string, separator: string): string[] => {
+  const out: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    if (ch === '{') depth++;
+    if (ch === '}') depth--;
+    if (ch === separator && depth === 0) {
+      out.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  out.push(current.trim());
+  return out;
+};
+
+const parseOptions = (value: string): Record<string, string> => {
+  const options: Record<string, string> = {};
+  let i = 0;
+  while (i < value.length) {
+    while (i < value.length && /[\s,]/.test(value[i])) i++;
+    if (i >= value.length) break;
+
+    let key = '';
+    while (i < value.length && !/[\s{]/.test(value[i])) {
+      key += value[i];
+      i++;
+    }
+    while (i < value.length && /\s/.test(value[i])) i++;
+    if (value[i] !== '{') break;
+
+    let depth = 0;
+    let body = '';
+    i++;
+    depth++;
+    while (i < value.length && depth > 0) {
+      const ch = value[i];
+      if (ch === '{') {
+        depth++;
+        body += ch;
+      } else if (ch === '}') {
+        depth--;
+        if (depth > 0) body += ch;
+      } else {
+        body += ch;
+      }
+      i++;
+    }
+    options[key] = body;
+  }
+  return options;
+};
+
+const hasNonWhitespaceLiteral = (value: string): boolean => /\S/.test(value);
+
+const isRuntimeOnlyWaysExpression = (expression: string): boolean => {
+  const parts = splitTopLevel(expression, ',');
+  if (!parts.length) return false;
+
+  const arg = parts[0];
+  if (!arg) return false;
+
+  if (parts.length === 1) {
+    return true;
+  }
+
+  const formatType = parts[1];
+  if (!formatType) return false;
+
+  if (
+    formatType === 'number' ||
+    formatType === 'date' ||
+    formatType === 'datetime' ||
+    formatType === 'list' ||
+    formatType === 'money'
+  ) {
+    return true;
+  }
+
+  if (formatType === 'relativetime' || formatType === 'displayname') {
+    return Boolean(parts[2]?.trim());
+  }
+
+  if (formatType === 'plural' || formatType === 'select') {
+    const optionValues = Object.values(parseOptions(parts.slice(2).join(',')));
+    return (
+      optionValues.length > 0 && optionValues.every((value) => isRuntimeOnlyWaysMessage(value))
+    );
+  }
+
+  return false;
+};
+
+export const isRuntimeOnlyWaysMessage = (text: string): boolean => {
+  let sawExpression = false;
+  let literal = '';
+  let i = 0;
+
+  while (i < text.length) {
+    if (text[i] !== '{') {
+      literal += text[i];
+      i++;
+      continue;
+    }
+
+    if (hasNonWhitespaceLiteral(literal)) {
+      return false;
+    }
+    literal = '';
+
+    let depth = 1;
+    let expression = '';
+    i++;
+
+    while (i < text.length && depth > 0) {
+      const ch = text[i];
+      if (ch === '{') {
+        depth++;
+        expression += ch;
+      } else if (ch === '}') {
+        depth--;
+        if (depth > 0) {
+          expression += ch;
+        }
+      } else {
+        expression += ch;
+      }
+      i++;
+    }
+
+    if (depth !== 0) {
+      return false;
+    }
+
+    sawExpression = true;
+    if (!isRuntimeOnlyWaysExpression(expression.trim())) {
+      return false;
+    }
+  }
+
+  if (hasNonWhitespaceLiteral(literal)) {
+    return false;
+  }
+
+  return sawExpression || text.trim() === '';
+};
+
 export const formatWaysParser = (
   vars: Record<string, any> = {},
   text: string,
   locale: string
 ): string => {
-  const splitTopLevel = (value: string, separator: string): string[] => {
-    const out: string[] = [];
-    let depth = 0;
-    let current = '';
-    for (let i = 0; i < value.length; i++) {
-      const ch = value[i];
-      if (ch === '{') depth++;
-      if (ch === '}') depth--;
-      if (ch === separator && depth === 0) {
-        out.push(current.trim());
-        current = '';
-        continue;
-      }
-      current += ch;
-    }
-    out.push(current.trim());
-    return out;
-  };
-
-  const parseOptions = (value: string): Record<string, string> => {
-    const options: Record<string, string> = {};
-    let i = 0;
-    while (i < value.length) {
-      while (i < value.length && /[\s,]/.test(value[i])) i++;
-      if (i >= value.length) break;
-
-      let key = '';
-      while (i < value.length && !/[\s{]/.test(value[i])) {
-        key += value[i];
-        i++;
-      }
-      while (i < value.length && /\s/.test(value[i])) i++;
-      if (value[i] !== '{') break;
-
-      let depth = 0;
-      let body = '';
-      i++;
-      depth++;
-      while (i < value.length && depth > 0) {
-        const ch = value[i];
-        if (ch === '{') {
-          depth++;
-          body += ch;
-        } else if (ch === '}') {
-          depth--;
-          if (depth > 0) body += ch;
-        } else {
-          body += ch;
-        }
-        i++;
-      }
-      options[key] = body;
-    }
-    return options;
-  };
-
   const evaluateExpression = (expression: string): string => {
     const parts = splitTopLevel(expression, ',');
     if (!parts.length) return `{${expression}}`;
