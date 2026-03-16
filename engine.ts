@@ -1,10 +1,15 @@
 import {
+  buildTranslationFallbackValues,
+  DEFAULT_TRANSLATION_FALLBACK_CONFIG,
+  fetchConfig,
   fetchTranslations,
   generateHashId,
   init,
+  resolveTranslationFallbackMode,
   type Fetcher,
   type InProgressTranslation,
   type _RequestInitDecorator,
+  type TranslationFallbackConfig,
   type TranslationContextInput,
   type TranslationContextInputObject,
   type Translations,
@@ -73,6 +78,7 @@ export class WaysEngine {
   private baseLocale: string;
   private targetLocale: string;
   private contextKey: string;
+  private translationFallbackConfigPromise: Promise<TranslationFallbackConfig> | null = null;
 
   constructor(options: WaysEngineOptions) {
     this.baseLocale = canonicalizeLocale(options.baseLocale || DEFAULT_BASE_LOCALE);
@@ -100,6 +106,16 @@ export class WaysEngine {
   getLocale = (): string => this.targetLocale;
 
   getStore = (): TranslationStore => this.store;
+
+  private getTranslationFallbackConfig = async (): Promise<TranslationFallbackConfig> => {
+    if (!this.translationFallbackConfigPromise) {
+      this.translationFallbackConfigPromise = fetchConfig()
+        .then((config) => config.translationFallback)
+        .catch(() => DEFAULT_TRANSLATION_FALLBACK_CONFIG);
+    }
+
+    return this.translationFallbackConfigPromise;
+  };
 
   t = async (text: string, options: WaysEngineTranslateOptions = {}): Promise<string> => {
     const sourceText = text.toString();
@@ -149,8 +165,20 @@ export class WaysEngine {
 
     await this.store.ensure([entry]);
 
-    const translated = tryReadCached() || sourceText;
-    return formatWithVars(translated, options.vars, targetLocale);
+    const translated = tryReadCached();
+    if (translated) {
+      return formatWithVars(translated, options.vars, targetLocale);
+    }
+
+    const translationFallbackConfig = await this.getTranslationFallbackConfig();
+    const fallbackValues = buildTranslationFallbackValues(
+      resolveTranslationFallbackMode(translationFallbackConfig, targetLocale),
+      texts,
+      contextKey
+    );
+    const translatedFallback = fallbackValues[0] ?? sourceText;
+
+    return formatWithVars(translatedFallback, options.vars, targetLocale);
   };
 }
 

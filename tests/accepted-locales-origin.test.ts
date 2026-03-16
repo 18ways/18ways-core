@@ -41,7 +41,7 @@ describe('fetchAcceptedLocales', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
-      'https://preview.18ways.com/api/enabled-languages',
+      'https://preview.18ways.com/api/config',
       expect.objectContaining({
         method: 'GET',
       })

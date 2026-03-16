@@ -1,5 +1,11 @@
 import { generateHashIdV2 } from './crypto';
 import { canonicalizeLocale } from './i18n-shared';
+import {
+  isRichTextMarkup,
+  mapRichTextTextNodes,
+  parseRichTextSourceMarkup,
+  serializeRichTextToMarkup,
+} from './rich-text';
 
 export interface Translations {
   // Leaf arrays store encrypted translation payload strings.
@@ -31,6 +37,21 @@ export interface TranslationContextValue {
   treePath: string;
   filePath: string;
 }
+
+export type TranslationFallbackMode = 'source' | 'blank' | 'key';
+
+export interface TranslationFallbackConfig {
+  default: TranslationFallbackMode;
+  overrides: Array<{
+    locale: string;
+    fallback: TranslationFallbackMode;
+  }>;
+}
+
+export const DEFAULT_TRANSLATION_FALLBACK_CONFIG: TranslationFallbackConfig = {
+  default: 'source',
+  overrides: [],
+};
 
 export interface TranslationContextInputObject {
   name: string;
@@ -79,6 +100,12 @@ export interface FetchSeedResult {
     wordsRetrieved: number;
     translationsRetrieved: number;
   };
+}
+
+export interface FetchConfigResult {
+  languages: Language[];
+  total: number;
+  translationFallback: TranslationFallbackConfig;
 }
 
 interface FetchXOptions {
@@ -163,6 +190,39 @@ const parseLocalesFromApiResponse = (data: any): string[] => {
   return Array.from(new Set(locales.map(canonicalizeLocale).filter(Boolean)));
 };
 
+const isTranslationFallbackMode = (value: unknown): value is TranslationFallbackMode =>
+  value === 'source' || value === 'blank' || value === 'key';
+
+type TranslationFallbackOverrideInput = {
+  locale?: unknown;
+  fallback?: unknown;
+};
+
+const normalizeTranslationFallbackConfig = (value: any): TranslationFallbackConfig => {
+  const defaultFallback = isTranslationFallbackMode(value?.default) ? value.default : 'source';
+  const rawOverrides: TranslationFallbackOverrideInput[] = Array.isArray(value?.overrides)
+    ? value.overrides
+    : [];
+
+  return {
+    default: defaultFallback,
+    overrides: rawOverrides
+      .map((override) => {
+        const locale = canonicalizeLocale(
+          typeof override?.locale === 'string' ? override.locale : ''
+        );
+        const fallback = isTranslationFallbackMode(override?.fallback) ? override.fallback : null;
+        if (!locale || !fallback) {
+          return null;
+        }
+        return { locale, fallback };
+      })
+      .filter((override): override is { locale: string; fallback: TranslationFallbackMode } =>
+        Boolean(override)
+      ),
+  };
+};
+
 const normalizeAcceptedLocaleList = (
   locales: ReadonlyArray<string | null | undefined> = []
 ): string[] => {
@@ -196,6 +256,45 @@ export const resolveAcceptedLocales = (
     baseLocale,
     normalizeAcceptedLocaleList(localeSources.flatMap((locales) => locales || []))
   );
+};
+
+export const resolveTranslationFallbackMode = (
+  config: TranslationFallbackConfig | null | undefined,
+  locale: string
+): TranslationFallbackMode => {
+  const normalizedLocale = canonicalizeLocale(locale);
+  const normalizedConfig = config || DEFAULT_TRANSLATION_FALLBACK_CONFIG;
+  const override = normalizedConfig.overrides.find((entry) => entry.locale === normalizedLocale);
+  return override?.fallback || normalizedConfig.default;
+};
+
+export const buildTranslationFallbackValues = (
+  fallbackMode: TranslationFallbackMode,
+  sourceValues: string[],
+  key: string
+): string[] => {
+  const richSourceValue =
+    sourceValues.length === 1 && isRichTextMarkup(sourceValues[0])
+      ? parseRichTextSourceMarkup(sourceValues[0]).value
+      : null;
+
+  if (richSourceValue) {
+    if (fallbackMode === 'blank') {
+      return [serializeRichTextToMarkup(mapRichTextTextNodes(richSourceValue, () => '').nodes)];
+    }
+    if (fallbackMode === 'key') {
+      return [serializeRichTextToMarkup(mapRichTextTextNodes(richSourceValue, () => key).nodes)];
+    }
+    return sourceValues;
+  }
+
+  if (fallbackMode === 'blank') {
+    return sourceValues.map(() => '');
+  }
+  if (fallbackMode === 'key') {
+    return sourceValues.map(() => key);
+  }
+  return sourceValues;
 };
 
 export const resolveOrigin = (input: {
@@ -256,8 +355,7 @@ export const fetchAcceptedLocales = async (
   }
 ): Promise<string[]> => {
   const defaultLocale = canonicalizeLocale(fallbackLocale || DEFAULT_LOCALE);
-  const requestOrigin = options?.origin ? normalizeOrigin(options.origin) : null;
-  const acceptedLocalesApiKey = resolveApiKey(options?.apiKey);
+  const acceptedLocalesApiKey = resolveApiKey(options?.apiKey || apiKey);
   const acceptedLocalesCacheTtlSeconds =
     typeof options?.cacheTtlSeconds === 'number' &&
     Number.isFinite(options.cacheTtlSeconds) &&
@@ -269,49 +367,16 @@ export const fetchAcceptedLocales = async (
     return [defaultLocale];
   }
 
-  const endpoint = joinApiBaseAndPath(resolveApiBase(options?.apiUrl), '/api/enabled-languages');
-
   try {
-    const headers: Record<string, string> = {
-      'x-api-key': acceptedLocalesApiKey,
-    };
-
-    if (requestOrigin) {
-      headers.origin = requestOrigin;
-    }
-
-    const requestInit: _RequestInitLike =
-      options?.forceRefresh || acceptedLocalesCacheTtlSeconds === 0
-        ? {
-            method: 'GET',
-            headers,
-            cache: 'no-store',
-          }
-        : {
-            method: 'GET',
-            headers,
-            cache: 'force-cache',
-          };
-
-    const finalRequestInit = options?._requestInitDecorator
-      ? options._requestInitDecorator({
-          url: endpoint,
-          method: 'GET',
-          requestInit,
-          cacheTtlSeconds: acceptedLocalesCacheTtlSeconds,
-        })
-      : requestInit;
-
-    const response = await (options?.fetcher || fetch)(endpoint, finalRequestInit as RequestInit);
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '');
-      throw new Error(
-        `Failed to fetch accepted locales: status=${response.status} origin=${requestOrigin || 'none'} endpoint=${endpoint} body=${errorBody.slice(0, 200)}`
-      );
-    }
-
-    const data = await response.json();
+    const data = await fetchConfig({
+      forceRefresh: options?.forceRefresh,
+      origin: options?.origin,
+      apiKey: acceptedLocalesApiKey,
+      apiUrl: options?.apiUrl,
+      fetcher: options?.fetcher,
+      cacheTtlSeconds: acceptedLocalesCacheTtlSeconds,
+      _requestInitDecorator: options?._requestInitDecorator,
+    });
     const fetchedLocales = parseLocalesFromApiResponse(data);
     const locales = ensureBaseLocaleAccepted(defaultLocale, fetchedLocales);
 
@@ -320,6 +385,16 @@ export const fetchAcceptedLocales = async (
     console.error('[18ways] Failed to load accepted locales:', error);
     return [defaultLocale];
   }
+};
+
+export const getWindowTranslationFallbackConfig = (): TranslationFallbackConfig | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  return window.__18WAYS_TRANSLATION_FALLBACK_CONFIG__
+    ? normalizeTranslationFallbackConfig(window.__18WAYS_TRANSLATION_FALLBACK_CONFIG__)
+    : null;
 };
 
 export const getInMemoryTranslations = () => {
@@ -477,25 +552,103 @@ export interface Language {
   flag?: string;
 }
 
-export interface FetchEnabledLanguagesResult {
-  languages: Language[];
-  total: number;
-}
+const fetchConfigRaw = async (options?: {
+  forceRefresh?: boolean;
+  origin?: string;
+  apiKey?: string;
+  apiUrl?: string;
+  fetcher?: Fetcher;
+  cacheTtlSeconds?: number;
+  _requestInitDecorator?: _RequestInitDecorator;
+}): Promise<FetchConfigResult> => {
+  const configApiKey = resolveApiKey(options?.apiKey || apiKey);
+  if (!configApiKey) {
+    throw new Error('API key is not set');
+  }
 
-export const fetchEnabledLanguages = async (): Promise<FetchEnabledLanguagesResult> => {
-  return fetchX<FetchEnabledLanguagesResult>({
-    url: '/api/enabled-languages',
-    method: 'GET',
-    payload: undefined,
-    onError: (e) => {
-      console.error('Failed to fetch enabled languages:', e);
-      // Return empty array on error - components should handle this gracefully
-      return {
-        languages: [],
-        total: 0,
-      };
-    },
-  });
+  const resolvedRequestOrigin = options?.origin
+    ? normalizeOrigin(options.origin)
+    : typeof window === 'undefined' && requestOrigin
+      ? requestOrigin
+      : null;
+  const resolvedCacheTtlSeconds =
+    typeof options?.cacheTtlSeconds === 'number' &&
+    Number.isFinite(options.cacheTtlSeconds) &&
+    options.cacheTtlSeconds >= 0
+      ? Math.floor(options.cacheTtlSeconds)
+      : cacheTtlSeconds;
+  const endpoint = joinApiBaseAndPath(resolveApiBase(options?.apiUrl || apiUrl), '/api/config');
+  const headers: Record<string, string> = {
+    'x-api-key': configApiKey,
+  };
+
+  if (resolvedRequestOrigin) {
+    headers.origin = resolvedRequestOrigin;
+  }
+
+  const requestInit: _RequestInitLike =
+    options?.forceRefresh || resolvedCacheTtlSeconds === 0
+      ? {
+          method: 'GET',
+          headers,
+          cache: 'no-store',
+        }
+      : {
+          method: 'GET',
+          headers,
+          cache: 'force-cache',
+        };
+
+  const decorator = options?._requestInitDecorator || customRequestInitDecorator;
+  const finalRequestInit = decorator
+    ? decorator({
+        url: endpoint,
+        method: 'GET',
+        requestInit,
+        cacheTtlSeconds: resolvedCacheTtlSeconds,
+      })
+    : requestInit;
+
+  const response = await (options?.fetcher || customFetcher || fetch)(
+    endpoint,
+    finalRequestInit as RequestInit
+  );
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => '');
+    throw new Error(
+      `Failed to fetch config: status=${response.status} origin=${resolvedRequestOrigin || 'none'} endpoint=${endpoint} body=${errorBody.slice(0, 200)}`
+    );
+  }
+
+  const data = await response.json();
+
+  return {
+    languages: Array.isArray(data?.languages) ? data.languages : [],
+    total: typeof data?.total === 'number' ? data.total : 0,
+    translationFallback: normalizeTranslationFallbackConfig(data?.translationFallback),
+  };
+};
+
+export const fetchConfig = async (options?: {
+  forceRefresh?: boolean;
+  origin?: string;
+  apiKey?: string;
+  apiUrl?: string;
+  fetcher?: Fetcher;
+  cacheTtlSeconds?: number;
+  _requestInitDecorator?: _RequestInitDecorator;
+}): Promise<FetchConfigResult> => {
+  try {
+    return await fetchConfigRaw(options);
+  } catch (e) {
+    console.error('Failed to fetch config:', e);
+    return {
+      languages: [],
+      total: 0,
+      translationFallback: DEFAULT_TRANSLATION_FALLBACK_CONFIG,
+    };
+  }
 };
 
 export const generateHashId = (x: any): string => generateHashIdV2(x);

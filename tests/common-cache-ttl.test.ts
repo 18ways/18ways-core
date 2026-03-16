@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchEnabledLanguages, fetchSeed, init } from '../common';
+import { fetchConfig, fetchSeed, init } from '../common';
 
 describe('common - cache ttl', () => {
   beforeEach(() => {
@@ -9,7 +9,11 @@ describe('common - cache ttl', () => {
   it('uses generic force-cache semantics for GET requests by default', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ languages: [], total: 0 }),
+      json: async () => ({
+        languages: [],
+        total: 0,
+        translationFallback: { default: 'source', overrides: [] },
+      }),
     });
 
     init({
@@ -17,17 +21,21 @@ describe('common - cache ttl', () => {
       fetcher: fetchMock as typeof fetch,
     });
 
-    await fetchEnabledLanguages();
+    await fetchConfig();
 
     const call = fetchMock.mock.calls[0];
     expect(call[1].cache).toBe('force-cache');
-    expect(call[0]).toContain('/api/enabled-languages');
+    expect(call[0]).toContain('/api/config');
   });
 
   it('switches GET requests to no-store when cache ttl is zero', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ languages: [], total: 0 }),
+      json: async () => ({
+        languages: [],
+        total: 0,
+        translationFallback: { default: 'source', overrides: [] },
+      }),
     });
 
     init({
@@ -36,7 +44,7 @@ describe('common - cache ttl', () => {
       cacheTtlSeconds: 0,
     });
 
-    await fetchEnabledLanguages();
+    await fetchConfig();
 
     const call = fetchMock.mock.calls[0];
     expect(call[1].cache).toBe('no-store');
@@ -45,7 +53,11 @@ describe('common - cache ttl', () => {
   it('allows callers to decorate request init in a framework-specific way', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ languages: [], total: 0 }),
+      json: async () => ({
+        languages: [],
+        total: 0,
+        translationFallback: { default: 'source', overrides: [] },
+      }),
     });
     const requestInitDecorator = vi.fn(({ requestInit, cacheTtlSeconds }) => ({
       ...requestInit,
@@ -59,7 +71,7 @@ describe('common - cache ttl', () => {
       _requestInitDecorator: requestInitDecorator,
     });
 
-    await fetchEnabledLanguages();
+    await fetchConfig();
 
     expect(requestInitDecorator).toHaveBeenCalledWith(
       expect.objectContaining({
