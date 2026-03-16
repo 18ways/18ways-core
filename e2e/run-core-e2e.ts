@@ -103,12 +103,13 @@ const run = async () => {
   const app = new VanillaHelloWorldApp(engine);
 
   const english = await app.render();
+  await engine.getStore().waitForIdle();
   assert.deepEqual(english, {
     hello: TRANSLATION_TABLE['en-US'][SOURCE_TEXTS[0]],
     subtitle: TRANSLATION_TABLE['en-US'][SOURCE_TEXTS[1]],
     greeting: 'Hello Ada',
   });
-  assert.equal(fetchCalls.length, 0);
+  assert.equal(fetchCalls.length > 0, true);
 
   const japanese = await app.switchLanguage('ja-JP');
   assert.deepEqual(japanese, {

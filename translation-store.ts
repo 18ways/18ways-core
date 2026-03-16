@@ -25,6 +25,12 @@ const translationEntryTriple = (
   entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textsHash'>
 ) => JSON.stringify([entry.targetLocale, entry.key, entry.textsHash]);
 
+const isCaptureEntry = (
+  entry: Pick<InProgressTranslation, 'baseLocale' | 'targetLocale'>
+): boolean => {
+  return Boolean(entry.baseLocale && entry.targetLocale && entry.baseLocale === entry.targetLocale);
+};
+
 export const translationEntryId = (
   entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textsHash' | 'contextFingerprint'>
 ) =>
@@ -98,9 +104,13 @@ export class TranslationStore {
     return this.translationSnapshot;
   };
 
-  hasInFlightRequests = (): boolean => this.inFlight.size > 0;
+  hasInFlightRequests = (): boolean => this.inFlightByKey.size > 0;
 
-  hasPendingRequests = (): boolean => this.pending.size > 0;
+  hasPendingRequests = (): boolean => this.pendingByKey.size > 0;
+
+  hasInFlightEntries = (): boolean => this.inFlight.size > 0;
+
+  hasPendingEntries = (): boolean => this.pending.size > 0;
 
   hasInFlightRequestsForKey = (key: string): boolean => (this.inFlightByKey.get(key) ?? 0) > 0;
 
@@ -177,6 +187,7 @@ export class TranslationStore {
 
   enqueue = (entry: InProgressTranslation): boolean => {
     const id = translationEntryId(entry);
+    const captureEntry = isCaptureEntry(entry);
 
     if (!entry.targetLocale) {
       return false;
@@ -186,11 +197,11 @@ export class TranslationStore {
       this.getTranslation(entry.targetLocale, entry.key, entry.textsHash)
     );
 
-    if (!entry.syncOnly && hasCachedTranslation) {
+    if (!captureEntry && hasCachedTranslation) {
       return false;
     }
 
-    if (entry.syncOnly && this.completed.has(id)) {
+    if (captureEntry && this.completed.has(id)) {
       return false;
     }
 
@@ -199,7 +210,7 @@ export class TranslationStore {
     }
 
     this.pending.set(id, entry);
-    if (!entry.syncOnly) {
+    if (!captureEntry) {
       this.adjustContextCount(this.pendingByKey, entry.key, 1);
     }
     this.scheduleFlush();
@@ -287,11 +298,11 @@ export class TranslationStore {
       this.pending.clear();
 
       batch.forEach((entry) => {
-        if (!entry.syncOnly) {
+        if (!isCaptureEntry(entry)) {
           this.adjustContextCount(this.pendingByKey, entry.key, -1);
         }
         this.inFlight.add(translationEntryId(entry));
-        if (!entry.syncOnly) {
+        if (!isCaptureEntry(entry)) {
           this.adjustContextCount(this.inFlightByKey, entry.key, 1);
         }
       });
@@ -363,7 +374,7 @@ export class TranslationStore {
       } finally {
         batch.forEach((entry) => {
           this.inFlight.delete(translationEntryId(entry));
-          if (!entry.syncOnly) {
+          if (!isCaptureEntry(entry)) {
             this.adjustContextCount(this.inFlightByKey, entry.key, -1);
           }
         });

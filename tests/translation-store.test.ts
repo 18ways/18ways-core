@@ -29,7 +29,7 @@ describe('TranslationStore', () => {
     expect(store.getTranslation('en-GB', 'keep-key', '["Hello","keep-key"]')).toEqual(['Hello']);
   });
 
-  it('syncs cached translations once per context fingerprint without entering loading state', async () => {
+  it('captures same-locale observations once per context fingerprint without entering loading state', async () => {
     const fetchTranslations = vi.fn(async (entries) => ({
       data: entries.map((entry) => ({
         locale: entry.targetLocale,
@@ -54,12 +54,12 @@ describe('TranslationStore', () => {
 
     expect(
       store.enqueue({
+        baseLocale: 'es-ES',
         targetLocale: 'es-ES',
         key: 'cta',
         textsHash: 'hash_1',
         texts: ['Hello'],
         contextFingerprint: 'fingerprint-a',
-        syncOnly: true,
       })
     ).toBe(true);
     expect(store.getSnapshot().hasPending).toBe(false);
@@ -77,22 +77,22 @@ describe('TranslationStore', () => {
     ).toBe(true);
     expect(
       store.enqueue({
+        baseLocale: 'es-ES',
         targetLocale: 'es-ES',
         key: 'cta',
         textsHash: 'hash_1',
         texts: ['Hello'],
         contextFingerprint: 'fingerprint-a',
-        syncOnly: true,
       })
     ).toBe(false);
     expect(
       store.enqueue({
+        baseLocale: 'es-ES',
         targetLocale: 'es-ES',
         key: 'cta',
         textsHash: 'hash_1',
         texts: ['Hello'],
         contextFingerprint: 'fingerprint-b',
-        syncOnly: true,
       })
     ).toBe(true);
 
@@ -101,7 +101,7 @@ describe('TranslationStore', () => {
     expect(fetchTranslations).toHaveBeenCalledTimes(2);
   });
 
-  it('clears completed sync entries when a context is garbage-collected', async () => {
+  it('clears completed capture entries when a context is garbage-collected', async () => {
     const fetchTranslations = vi.fn(async (entries) => ({
       data: entries.map((entry) => ({
         locale: entry.targetLocale,
@@ -125,12 +125,12 @@ describe('TranslationStore', () => {
     });
 
     store.enqueue({
+      baseLocale: 'es-ES',
       targetLocale: 'es-ES',
       key: 'cta',
       textsHash: 'hash_1',
       texts: ['Hello'],
       contextFingerprint: 'fingerprint-a',
-      syncOnly: true,
     });
     await store.waitForIdle();
 
@@ -138,12 +138,12 @@ describe('TranslationStore', () => {
 
     expect(
       store.enqueue({
+        baseLocale: 'es-ES',
         targetLocale: 'es-ES',
         key: 'cta',
         textsHash: 'hash_1',
         texts: ['Hello'],
         contextFingerprint: 'fingerprint-a',
-        syncOnly: true,
       })
     ).toBe(true);
   });

@@ -71,8 +71,6 @@ export interface InProgressTranslation {
   texts: string[];
   contextFingerprint?: string;
   contextMetadata?: TranslationContextValue;
-  /** @internal When true, persist context metadata even if translation text is already cached. */
-  syncOnly?: boolean;
 }
 
 export interface FetchTranslationsResult {

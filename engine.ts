@@ -124,8 +124,20 @@ export class WaysEngine {
     const contextKey = normalizeContextKey(options.context || this.contextKey);
     const texts = [sourceText];
     const textsHash = generateHashId([...texts, contextKey]);
+    const entry: InProgressTranslation = {
+      key: contextKey,
+      textsHash,
+      baseLocale,
+      targetLocale,
+      texts,
+    };
 
-    if (baseLocale === targetLocale || isRuntimeOnlyWaysMessage(sourceText)) {
+    if (isRuntimeOnlyWaysMessage(sourceText)) {
+      return formatWithVars(sourceText, options.vars, targetLocale);
+    }
+
+    if (baseLocale === targetLocale) {
+      this.store.enqueue(entry);
       return formatWithVars(sourceText, options.vars, targetLocale);
     }
 
@@ -154,14 +166,6 @@ export class WaysEngine {
     if (cachedText) {
       return formatWithVars(cachedText, options.vars, targetLocale);
     }
-
-    const entry: InProgressTranslation = {
-      key: contextKey,
-      textsHash,
-      baseLocale,
-      targetLocale,
-      texts,
-    };
 
     await this.store.ensure([entry]);
 

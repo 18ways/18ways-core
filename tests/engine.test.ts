@@ -5,7 +5,7 @@ import { encryptTranslationValues } from '../crypto';
 import { formatWaysParser } from '../parsers/ways-parser';
 
 describe('WaysEngine', () => {
-  it('returns source text for base locale without calling translate endpoint', async () => {
+  it('returns source text for base locale while still sending a capture request', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ data: [], errors: [] }), {
         status: 200,
@@ -24,7 +24,8 @@ describe('WaysEngine', () => {
 
     const value = await engine.t('Hello world');
     expect(value).toBe('Hello world');
-    expect(fetcher).not.toHaveBeenCalled();
+    await engine.getStore().waitForIdle();
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it('fetches, decrypts, and caches translated values by locale', async () => {
