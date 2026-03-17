@@ -1,4 +1,4 @@
-import { encryptTranslationValues, generateHashIdV2 } from './crypto';
+import { encryptTranslationValue, generateHashIdV2 } from './crypto';
 import { canonicalizeLocale } from './i18n-shared';
 import {
   isRichTextMarkup,
@@ -193,15 +193,15 @@ const rot13Char = (char: string): string => {
 
 const rot13 = (value: string): string => value.replace(/[A-Za-z]/g, rot13Char);
 
-const rot13TranslationTexts = (texts: string[]): string[] => {
-  if (texts.length === 1 && isRichTextMarkup(texts[0])) {
-    const parsed = parseRichTextSourceMarkup(texts[0]);
+const rot13TranslationText = (text: string): string => {
+  if (isRichTextMarkup(text)) {
+    const parsed = parseRichTextSourceMarkup(text);
     if (parsed.value) {
-      return [serializeRichTextToMarkup(mapRichTextTextNodes(parsed.value, rot13).nodes)];
+      return serializeRichTextToMarkup(mapRichTextTextNodes(parsed.value, rot13).nodes);
     }
   }
 
-  return texts.map(rot13);
+  return rot13(text);
 };
 
 export const getDemoLanguageInfo = (locale: string): Language | null => {
@@ -246,7 +246,7 @@ const createDemoTranslationResult = (
     const baseLocale = canonicalizeLocale(entry.baseLocale || DEFAULT_LOCALE) || DEFAULT_LOCALE;
     const targetLocale = canonicalizeLocale(entry.targetLocale);
 
-    if (!targetLocale || !entry.key || !entry.textsHash || !Array.isArray(entry.texts)) {
+    if (!targetLocale || !entry.key || !entry.textHash || typeof entry.text !== 'string') {
       return;
     }
 
@@ -258,7 +258,7 @@ const createDemoTranslationResult = (
       errors.push({
         locale: targetLocale,
         key: entry.key,
-        textsHash: entry.textsHash,
+        textHash: entry.textHash,
         contextFingerprint: entry.contextFingerprint ?? null,
       });
       return;
@@ -267,15 +267,15 @@ const createDemoTranslationResult = (
     data.push({
       locale: targetLocale,
       key: entry.key,
-      textsHash: entry.textsHash,
-      translationId: entry.textsHash,
+      textHash: entry.textHash,
+      translationId: entry.textHash,
       contextFingerprint: entry.contextFingerprint ?? null,
-      translation: encryptTranslationValues({
-        translatedTexts: rot13TranslationTexts(entry.texts),
-        sourceTexts: entry.texts,
+      translation: encryptTranslationValue({
+        translatedText: rot13TranslationText(entry.text),
+        sourceText: entry.text,
         locale: targetLocale,
         key: entry.key,
-        textsHash: entry.textsHash,
+        textHash: entry.textHash,
       }),
     });
   });

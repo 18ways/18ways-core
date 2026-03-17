@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { decryptTranslationValues } from '../crypto';
+import { decryptTranslationValue } from '../crypto';
 import { fetchConfig, fetchSeed, fetchTranslations, init } from '../common';
 
 describe('common - cache ttl', () => {
@@ -160,24 +160,24 @@ describe('common - cache ttl', () => {
     const result = await fetchTranslations([
       {
         key: 'app',
-        textsHash: 'hash-1',
+        textHash: 'hash-1',
         baseLocale: 'en-US',
         targetLocale: 'en-US-x-caesar',
-        texts: ['Hello <link>world</link>'],
+        text: 'Hello <link>world</link>',
       },
     ]);
 
     expect(result.errors).toEqual([]);
     expect(result.data).toHaveLength(1);
     expect(
-      decryptTranslationValues({
-        encryptedTexts: result.data[0].translation,
-        sourceTexts: ['Hello <link>world</link>'],
+      decryptTranslationValue({
+        encryptedText: result.data[0].translation,
+        sourceText: 'Hello <link>world</link>',
         locale: 'en-US-x-caesar',
         key: 'app',
-        textsHash: 'hash-1',
+        textHash: 'hash-1',
       })
-    ).toEqual(['Uryyb <link>jbeyq</link>']);
+    ).toEqual('Uryyb <link>jbeyq</link>');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
