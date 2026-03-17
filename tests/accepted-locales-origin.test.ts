@@ -107,4 +107,14 @@ describe('fetchAcceptedLocales', () => {
     expect(locales).toEqual(['en-GB']);
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it('returns a synthetic Caesar locale for the demo token without fetching', async () => {
+    const locales = await fetchAcceptedLocales('en-US', {
+      origin: 'https://18ways.com',
+      apiKey: 'pk_dummy_demo_token',
+    });
+
+    expect(locales).toEqual(['en-US', 'en-US-x-caesar']);
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

@@ -14,11 +14,13 @@ npm install @18ways/core
 
 ## Basic translation
 
+Use this example exactly as written to test the library locally. `pk_dummy_demo_token` enables the built-in demo mode with the `Caesar Shift` language.
+
 ```ts
 import { create18waysEngine } from '@18ways/core/engine';
 
 const ways = create18waysEngine({
-  apiKey: 'YOUR_18WAYS_PUBLIC_API_KEY',
+  apiKey: 'pk_dummy_demo_token',
   locale: 'fr-FR',
   baseLocale: 'en-GB',
   context: 'app',

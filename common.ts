@@ -1,4 +1,4 @@
-import { generateHashIdV2 } from './crypto';
+import { encryptTranslationValues, generateHashIdV2 } from './crypto';
 import { canonicalizeLocale } from './i18n-shared';
 import {
   isRichTextMarkup,
@@ -23,6 +23,7 @@ export type _RequestInitDecorator = (input: {
 
 interface InitOptions {
   key?: string;
+  baseLocale?: string;
   apiUrl?: string;
   fetcher?: Fetcher;
   cacheTtlSeconds?: number;
@@ -117,9 +118,11 @@ const DEFAULT_18WAYS_API_URL = 'https://internal.18ways.com/api';
 const DEFAULT_LOCALE = 'en-GB';
 const DEFAULT_ORIGIN = 'http://localhost:3000';
 const DEFAULT_ACCEPTED_LOCALES_CACHE_TTL_SECONDS = 60;
-const PLACEHOLDER_API_KEY = 'YOUR_18WAYS_PUBLIC_API_KEY';
+const DEMO_API_KEY = 'pk_dummy_demo_token';
+const DEMO_LOCALE_SUFFIX = '-x-caesar';
 
 let apiKey: string | undefined;
+let configuredBaseLocale: string | undefined;
 let apiUrl: string | undefined;
 let customFetcher: Fetcher | undefined;
 let requestOrigin: string | undefined;
@@ -127,7 +130,6 @@ let customRequestInitDecorator: _RequestInitDecorator | undefined;
 let serverCache: Translations | null = null;
 const DEFAULT_CACHE_TTL_SECONDS = 10 * 60;
 let cacheTtlSeconds = DEFAULT_CACHE_TTL_SECONDS;
-let hasWarnedAboutPlaceholderApiKey = false;
 
 const normalizeOrigin = (origin: string): string => origin.replace(/\/$/, '');
 
@@ -147,18 +149,7 @@ const joinApiBaseAndPath = (base: string, path: string): string => {
   return `${normalizedBase}${path}`;
 };
 
-const warnIfPlaceholderApiKey = (candidate?: string): void => {
-  if (!candidate || hasWarnedAboutPlaceholderApiKey) {
-    return;
-  }
-
-  if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
-    if (candidate === PLACEHOLDER_API_KEY) {
-      hasWarnedAboutPlaceholderApiKey = true;
-      console.error('[18ways] Please specify your actual API key, not the placeholder value');
-    }
-  }
-};
+export const isDemoApiKey = (candidate?: string): boolean => candidate === DEMO_API_KEY;
 
 const resolveApiKey = (explicitApiKey?: string): string | undefined => {
   if (typeof explicitApiKey !== 'string') {
@@ -166,8 +157,130 @@ const resolveApiKey = (explicitApiKey?: string): string | undefined => {
   }
 
   const trimmed = explicitApiKey.trim();
-  warnIfPlaceholderApiKey(trimmed);
   return trimmed ? trimmed : undefined;
+};
+
+const buildDemoLocale = (baseLocale?: string | null): string => {
+  const canonicalBaseLocale = canonicalizeLocale(baseLocale || DEFAULT_LOCALE) || DEFAULT_LOCALE;
+  const normalizedBaseLocale = canonicalBaseLocale.replace(/-x-.+$/i, '');
+  return `${normalizedBaseLocale}${DEMO_LOCALE_SUFFIX}`;
+};
+
+const getBaseLocaleFromDemoLocale = (locale: string): string | null => {
+  const canonicalLocale = canonicalizeLocale(locale);
+  const match = canonicalLocale.match(/^(.*)-x-caesar$/i);
+  return match?.[1] || null;
+};
+
+const isDemoLocaleForBaseLocale = (locale: string, baseLocale?: string | null): boolean => {
+  const canonicalLocale = canonicalizeLocale(locale);
+  return canonicalLocale.toLowerCase() === buildDemoLocale(baseLocale).toLowerCase();
+};
+
+const rot13Char = (char: string): string => {
+  const code = char.charCodeAt(0);
+
+  if (code >= 65 && code <= 90) {
+    return String.fromCharCode(((code - 65 + 13) % 26) + 65);
+  }
+
+  if (code >= 97 && code <= 122) {
+    return String.fromCharCode(((code - 97 + 13) % 26) + 97);
+  }
+
+  return char;
+};
+
+const rot13 = (value: string): string => value.replace(/[A-Za-z]/g, rot13Char);
+
+const rot13TranslationTexts = (texts: string[]): string[] => {
+  if (texts.length === 1 && isRichTextMarkup(texts[0])) {
+    const parsed = parseRichTextSourceMarkup(texts[0]);
+    if (parsed.value) {
+      return [serializeRichTextToMarkup(mapRichTextTextNodes(parsed.value, rot13).nodes)];
+    }
+  }
+
+  return texts.map(rot13);
+};
+
+export const getDemoLanguageInfo = (locale: string): Language | null => {
+  const baseLocale = getBaseLocaleFromDemoLocale(locale);
+  if (!baseLocale) {
+    return null;
+  }
+
+  return {
+    code: canonicalizeLocale(locale),
+    name: 'Caesar Shift',
+    nativeName: 'Caesar Shift',
+    flag: '🔄',
+  };
+};
+
+const createDemoConfig = (baseLocale?: string | null): FetchConfigResult => {
+  const resolvedBaseLocale = canonicalizeLocale(baseLocale || DEFAULT_LOCALE) || DEFAULT_LOCALE;
+  const demoLocale = buildDemoLocale(resolvedBaseLocale);
+
+  return {
+    languages: [
+      {
+        code: resolvedBaseLocale,
+        name: resolvedBaseLocale,
+        nativeName: resolvedBaseLocale,
+      },
+      getDemoLanguageInfo(demoLocale)!,
+    ],
+    total: 2,
+    translationFallback: DEFAULT_TRANSLATION_FALLBACK_CONFIG,
+  };
+};
+
+const createDemoTranslationResult = (
+  toTranslate: InProgressTranslation[]
+): FetchTranslationsResult => {
+  const data: FetchTranslationsResult['data'] = [];
+  const errors: FetchTranslationsResult['errors'] = [];
+
+  toTranslate.forEach((entry) => {
+    const baseLocale = canonicalizeLocale(entry.baseLocale || DEFAULT_LOCALE) || DEFAULT_LOCALE;
+    const targetLocale = canonicalizeLocale(entry.targetLocale);
+
+    if (!targetLocale || !entry.key || !entry.textsHash || !Array.isArray(entry.texts)) {
+      return;
+    }
+
+    if (baseLocale === targetLocale) {
+      return;
+    }
+
+    if (!isDemoLocaleForBaseLocale(targetLocale, baseLocale)) {
+      errors.push({
+        locale: targetLocale,
+        key: entry.key,
+        textsHash: entry.textsHash,
+        contextFingerprint: entry.contextFingerprint ?? null,
+      });
+      return;
+    }
+
+    data.push({
+      locale: targetLocale,
+      key: entry.key,
+      textsHash: entry.textsHash,
+      translationId: entry.textsHash,
+      contextFingerprint: entry.contextFingerprint ?? null,
+      translation: encryptTranslationValues({
+        translatedTexts: rot13TranslationTexts(entry.texts),
+        sourceTexts: entry.texts,
+        locale: targetLocale,
+        key: entry.key,
+        textsHash: entry.textsHash,
+      }),
+    });
+  });
+
+  return { data, errors };
 };
 
 const parseLocalesFromApiResponse = (data: any): string[] => {
@@ -364,6 +477,10 @@ export const fetchAcceptedLocales = async (
     return [defaultLocale];
   }
 
+  if (isDemoApiKey(acceptedLocalesApiKey)) {
+    return ensureBaseLocaleAccepted(defaultLocale, [buildDemoLocale(defaultLocale)]);
+  }
+
   try {
     const data = await fetchConfig({
       forceRefresh: options?.forceRefresh,
@@ -427,6 +544,7 @@ export const init = (keyOrOptions: string | InitOptions, rawOptions?: InitOption
     throw new Error('Cannot init without an API key');
   }
 
+  configuredBaseLocale = canonicalizeLocale(options.baseLocale || '') || undefined;
   apiUrl = options.apiUrl;
   customFetcher = options.fetcher;
   requestOrigin = options.origin;
@@ -508,6 +626,10 @@ const fetchX = async <T>({ url, method, payload, onError }: FetchXOptions): Prom
 export const fetchTranslations = async (
   toTranslate: InProgressTranslation[]
 ): Promise<FetchTranslationsResult> => {
+  if (isDemoApiKey(resolveApiKey(apiKey))) {
+    return createDemoTranslationResult(toTranslate);
+  }
+
   return fetchX<FetchTranslationsResult>({
     url: '/translate',
     method: 'POST',
@@ -528,6 +650,17 @@ export const fetchTranslations = async (
 };
 
 export const fetchSeed = async (keys: string[], targetLocale: string): Promise<FetchSeedResult> => {
+  if (isDemoApiKey(resolveApiKey(apiKey))) {
+    return {
+      data: {},
+      errors: [],
+      usage: {
+        wordsRetrieved: 0,
+        translationsRetrieved: 0,
+      },
+    };
+  }
+
   return fetchX<FetchSeedResult>({
     url: '/seed',
     method: 'POST',
@@ -561,6 +694,10 @@ const fetchConfigRaw = async (options?: {
   const configApiKey = resolveApiKey(options?.apiKey || apiKey);
   if (!configApiKey) {
     throw new Error('API key is not set');
+  }
+
+  if (isDemoApiKey(configApiKey)) {
+    return createDemoConfig(configuredBaseLocale || DEFAULT_LOCALE);
   }
 
   const resolvedRequestOrigin = options?.origin

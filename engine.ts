@@ -91,6 +91,7 @@ export class WaysEngine {
 
     init({
       key: options.apiKey,
+      baseLocale: options.baseLocale || this.baseLocale,
       apiUrl: options.apiUrl,
       fetcher: options.fetcher,
       cacheTtlSeconds: options.cacheTtlSeconds,
