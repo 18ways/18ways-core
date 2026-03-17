@@ -79,6 +79,11 @@
       "import": "./parsers/intl-runtime.ts"
     }
   },
+  "files": [
+    "*.ts",
+    "global.d.ts",
+    "parsers/**/*.ts"
+  ],
   "scripts": {
     "build": "echo '18ways-core build: source-only package'",
     "ts:check": "tsc --noEmit",
