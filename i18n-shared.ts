@@ -59,6 +59,7 @@ const AUTO_EXCLUDED_PATH_ROUTING_PATTERNS: WaysPathRoutingPattern[] = [
   /^\/_next(?:\/|$)/,
   /^\/api(?:\/|$)/,
   '/robots.txt',
+  '/llms.txt',
   '/favicon.ico',
   '/manifest.webmanifest',
   '/site.webmanifest',

@@ -56,6 +56,7 @@ describe('path routing config', () => {
     expect(isPathRoutingEnabled('/api/translations', {})).toBe(false);
     expect(isPathRoutingEnabled('/_next/static/chunk.js', {})).toBe(false);
     expect(isPathRoutingEnabled('/robots.txt', {})).toBe(false);
+    expect(isPathRoutingEnabled('/llms.txt', {})).toBe(false);
   });
 
   it('lets explicit include patterns override auto-excluded paths', () => {
