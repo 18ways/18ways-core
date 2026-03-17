@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isPathRoutingEnabled, pathMatchesPattern } from '../i18n-shared';
+import {
+  isAutoExcludedPathRoutingFilePath,
+  isAutoExcludedPathRoutingPath,
+  isPathRoutingEnabled,
+  pathMatchesPattern,
+} from '../i18n-shared';
 
 describe('path routing config', () => {
   it('matches string prefix patterns', () => {
@@ -57,12 +62,23 @@ describe('path routing config', () => {
     expect(isPathRoutingEnabled('/_next/static/chunk.js', {})).toBe(false);
     expect(isPathRoutingEnabled('/robots.txt', {})).toBe(false);
     expect(isPathRoutingEnabled('/llms.txt', {})).toBe(false);
+    expect(isPathRoutingEnabled('/sitemap.xml', {})).toBe(false);
   });
 
   it('lets explicit include patterns override auto-excluded paths', () => {
     expect(
       isPathRoutingEnabled('/robots.txt', {
         include: ['/robots.txt'],
+      })
+    ).toBe(true);
+    expect(
+      isPathRoutingEnabled('/sitemap.xml', {
+        include: ['/sitemap.xml'],
+      })
+    ).toBe(true);
+    expect(
+      isPathRoutingEnabled('/llms.txt', {
+        include: ['/llms.txt'],
       })
     ).toBe(true);
   });
@@ -73,5 +89,24 @@ describe('path routing config', () => {
         include: ['/'],
       })
     ).toBe(false);
+    expect(
+      isPathRoutingEnabled('/sitemap.xml', {
+        include: ['/'],
+      })
+    ).toBe(false);
+    expect(
+      isPathRoutingEnabled('/llms.txt', {
+        include: ['/'],
+      })
+    ).toBe(false);
+  });
+
+  it('exposes the shared auto-exclude matcher helpers', () => {
+    expect(isAutoExcludedPathRoutingPath('/api/translations')).toBe(true);
+    expect(isAutoExcludedPathRoutingPath('/sitemap.xml')).toBe(true);
+    expect(isAutoExcludedPathRoutingPath('/llms.txt')).toBe(true);
+    expect(isAutoExcludedPathRoutingFilePath('/sitemap.xml')).toBe(true);
+    expect(isAutoExcludedPathRoutingFilePath('/llms.txt')).toBe(true);
+    expect(isAutoExcludedPathRoutingFilePath('/api/translations')).toBe(false);
   });
 });

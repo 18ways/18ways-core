@@ -55,11 +55,12 @@ export type WaysPathRoutingConfig = {
   exclude?: WaysPathRoutingPattern[];
 };
 
-const AUTO_EXCLUDED_PATH_ROUTING_PATTERNS: WaysPathRoutingPattern[] = [
+export const AUTO_EXCLUDED_PATH_ROUTING_PATTERNS: WaysPathRoutingPattern[] = [
   /^\/_next(?:\/|$)/,
   /^\/api(?:\/|$)/,
   '/robots.txt',
   '/llms.txt',
+  '/sitemap.xml',
   '/favicon.ico',
   '/manifest.webmanifest',
   '/site.webmanifest',
@@ -121,6 +122,20 @@ export const pathMatchesPattern = (pathname: string, pattern: WaysPathRoutingPat
   );
 };
 
+export const isAutoExcludedPathRoutingPath = (pathname: string): boolean => {
+  const normalizedPathname = normalizePathname(pathname);
+  return AUTO_EXCLUDED_PATH_ROUTING_PATTERNS.some((pattern) =>
+    pathMatchesPattern(normalizedPathname, pattern)
+  );
+};
+
+export const isAutoExcludedPathRoutingFilePath = (pathname: string): boolean => {
+  const normalizedPathname = normalizePathname(pathname);
+  const lastSegment = normalizedPathname.split('/').pop() || '';
+
+  return lastSegment.includes('.') && isAutoExcludedPathRoutingPath(normalizedPathname);
+};
+
 export const isPathRoutingEnabled = (pathname: string, config?: WaysPathRoutingConfig): boolean => {
   const normalizedPathname = normalizePathname(pathname);
   const includePatterns = config?.include || [];
@@ -152,9 +167,7 @@ export const isPathRoutingEnabled = (pathname: string, config?: WaysPathRoutingC
     return true;
   }
 
-  const autoExcluded = AUTO_EXCLUDED_PATH_ROUTING_PATTERNS.some((pattern) =>
-    pathMatchesPattern(normalizedPathname, pattern)
-  );
+  const autoExcluded = isAutoExcludedPathRoutingPath(normalizedPathname);
   if (autoExcluded && !explicitlyOverridesAutoExclude) {
     return false;
   }
