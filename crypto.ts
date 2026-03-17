@@ -8,8 +8,7 @@ const MAC_MESSAGE_PREFIX = '18ways:mac';
 interface TranslationCryptoMeta {
   locale: string;
   key: string;
-  textsHash: string;
-  index: number;
+  textHash: string;
 }
 
 interface TranslationCryptoParams extends TranslationCryptoMeta {
@@ -120,8 +119,8 @@ const deriveKeys = (sourceText: string): { encryptionKey: Uint8Array; macKey: Ui
   };
 };
 
-const buildAad = ({ locale, key, textsHash, index }: TranslationCryptoMeta): string =>
-  `${ENCRYPTION_VERSION}|${locale}|${key}|${textsHash}|${index}`;
+const buildAad = ({ locale, key, textHash }: TranslationCryptoMeta): string =>
+  `${ENCRYPTION_VERSION}|${locale}|${key}|${textHash}`;
 
 const buildMacInput = (aad: string, iv: Uint8Array, ciphertext: Uint8Array): Uint8Array =>
   concatBytes(utf8ToBytes(`${MAC_MESSAGE_PREFIX}|${aad}|`), iv, ciphertext);
@@ -139,11 +138,10 @@ export const encryptTranslationValue = ({
   sourceText,
   locale,
   key,
-  textsHash,
-  index,
+  textHash,
 }: EncryptTranslationValueParams): string => {
   const { encryptionKey, macKey } = deriveKeys(sourceText);
-  const aad = buildAad({ locale, key, textsHash, index });
+  const aad = buildAad({ locale, key, textHash });
   const iv = secureRandomBytes(16);
 
   const encrypted = CryptoJS.AES.encrypt(
@@ -167,8 +165,7 @@ export const decryptTranslationValue = ({
   sourceText,
   locale,
   key,
-  textsHash,
-  index,
+  textHash,
 }: TranslationCryptoParams & { encryptedText: string }): string => {
   if (!isEncryptedTranslationValue(encryptedText)) {
     if (isTestEnvironment()) {
@@ -189,7 +186,7 @@ export const decryptTranslationValue = ({
   const receivedMac = fromBase64Url(macPart);
   const ciphertext = fromBase64Url(ciphertextPart);
   const { encryptionKey, macKey } = deriveKeys(sourceText);
-  const aad = buildAad({ locale, key, textsHash, index });
+  const aad = buildAad({ locale, key, textHash });
   const expectedMac = hmacSha256Bytes(macKey, buildMacInput(aad, iv, ciphertext));
 
   if (!constantTimeCompare(receivedMac, expectedMac)) {
@@ -207,66 +204,4 @@ export const decryptTranslationValue = ({
   );
 
   return CryptoJS.enc.Utf8.stringify(decrypted);
-};
-
-export const encryptTranslationValues = ({
-  translatedTexts,
-  sourceTexts,
-  locale,
-  key,
-  textsHash,
-}: {
-  translatedTexts: string[];
-  sourceTexts: string[];
-  locale: string;
-  key: string;
-  textsHash: string;
-}): string[] => {
-  if (translatedTexts.length !== sourceTexts.length) {
-    throw new Error(
-      `Cannot encrypt translation values: source and translated length mismatch (${sourceTexts.length} vs ${translatedTexts.length})`
-    );
-  }
-
-  return translatedTexts.map((translatedText, index) =>
-    encryptTranslationValue({
-      translatedText,
-      sourceText: sourceTexts[index],
-      locale,
-      key,
-      textsHash,
-      index,
-    })
-  );
-};
-
-export const decryptTranslationValues = ({
-  encryptedTexts,
-  sourceTexts,
-  locale,
-  key,
-  textsHash,
-}: {
-  encryptedTexts: string[];
-  sourceTexts: string[];
-  locale: string;
-  key: string;
-  textsHash: string;
-}): string[] => {
-  if (encryptedTexts.length !== sourceTexts.length) {
-    throw new Error(
-      `Cannot decrypt translation values: source and encrypted length mismatch (${sourceTexts.length} vs ${encryptedTexts.length})`
-    );
-  }
-
-  return encryptedTexts.map((encryptedText, index) =>
-    decryptTranslationValue({
-      encryptedText,
-      sourceText: sourceTexts[index],
-      locale,
-      key,
-      textsHash,
-      index,
-    })
-  );
 };

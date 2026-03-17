@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { create18waysEngine } from '../engine';
 import type { InProgressTranslation } from '../common';
-import { encryptTranslationValues } from '../crypto';
+import { encryptTranslationValue } from '../crypto';
 import { formatWaysParser } from '../parsers/ways-parser';
 
 describe('WaysEngine', () => {
@@ -38,13 +38,13 @@ describe('WaysEngine', () => {
       const data = entries.map((entry) => ({
         locale: entry.targetLocale,
         key: entry.key,
-        textsHash: entry.textsHash,
-        translation: encryptTranslationValues({
-          translatedTexts: ['Hola {name}'],
-          sourceTexts: entry.texts,
+        textHash: entry.textHash,
+        translation: encryptTranslationValue({
+          translatedText: 'Hola {name}',
+          sourceText: entry.text,
           locale: entry.targetLocale,
           key: entry.key,
-          textsHash: entry.textsHash,
+          textHash: entry.textHash,
         }),
       }));
 
@@ -137,13 +137,13 @@ describe('WaysEngine', () => {
           data: entries.map((entry) => ({
             locale: entry.targetLocale,
             key: entry.key,
-            textsHash: entry.textsHash,
-            translation: encryptTranslationValues({
-              translatedTexts: [translated],
-              sourceTexts: entry.texts,
+            textHash: entry.textHash,
+            translation: encryptTranslationValue({
+              translatedText: translated,
+              sourceText: entry.text,
               locale: entry.targetLocale,
               key: entry.key,
-              textsHash: entry.textsHash,
+              textHash: entry.textHash,
             }),
           })),
           errors: [],

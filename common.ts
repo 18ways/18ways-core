@@ -8,8 +8,8 @@ import {
 } from './rich-text';
 
 export interface Translations {
-  // Leaf arrays store encrypted translation payload strings.
-  [key: string]: string[] | Translations;
+  // Leaf values store encrypted translation payload strings.
+  [key: string]: string | Translations;
 }
 
 export type Fetcher = typeof fetch;
@@ -65,10 +65,10 @@ export type TranslationContextInput = string | TranslationContextInputObject;
 
 export interface InProgressTranslation {
   key: string;
-  textsHash: string;
+  textHash: string;
   baseLocale?: string;
   targetLocale: string;
-  texts: string[];
+  text: string;
   contextFingerprint?: string;
   contextMetadata?: TranslationContextValue;
 }
@@ -77,16 +77,16 @@ export interface FetchTranslationsResult {
   data: Array<{
     locale: string;
     key: string;
-    textsHash: string;
+    textHash: string;
     translationId: string;
     contextFingerprint?: string | null;
-    // AES-encrypted translation payloads.
-    translation: string[];
+    // AES-encrypted translation payload.
+    translation: string;
   }>;
   errors: Array<{
     locale: string;
     key: string;
-    textsHash: string;
+    textHash: string;
     contextFingerprint?: string | null;
   }>;
 }
@@ -266,33 +266,32 @@ export const resolveTranslationFallbackMode = (
   return override?.fallback || normalizedConfig.default;
 };
 
-export const buildTranslationFallbackValues = (
+export const buildTranslationFallbackValue = (
   fallbackMode: TranslationFallbackMode,
-  sourceValues: string[],
+  sourceText: string,
   key: string
-): string[] => {
-  const richSourceValue =
-    sourceValues.length === 1 && isRichTextMarkup(sourceValues[0])
-      ? parseRichTextSourceMarkup(sourceValues[0]).value
-      : null;
+): string => {
+  const richSourceValue = isRichTextMarkup(sourceText)
+    ? parseRichTextSourceMarkup(sourceText).value
+    : null;
 
   if (richSourceValue) {
     if (fallbackMode === 'blank') {
-      return [serializeRichTextToMarkup(mapRichTextTextNodes(richSourceValue, () => '').nodes)];
+      return serializeRichTextToMarkup(mapRichTextTextNodes(richSourceValue, () => '').nodes);
     }
     if (fallbackMode === 'key') {
-      return [serializeRichTextToMarkup(mapRichTextTextNodes(richSourceValue, () => key).nodes)];
+      return serializeRichTextToMarkup(mapRichTextTextNodes(richSourceValue, () => key).nodes);
     }
-    return sourceValues;
+    return sourceText;
   }
 
   if (fallbackMode === 'blank') {
-    return sourceValues.map(() => '');
+    return '';
   }
   if (fallbackMode === 'key') {
-    return sourceValues.map(() => key);
+    return key;
   }
-  return sourceValues;
+  return sourceText;
 };
 
 export const resolveOrigin = (input: {
@@ -520,7 +519,7 @@ export const fetchTranslations = async (
         errors: toTranslate.map((entry) => ({
           locale: entry.targetLocale,
           key: entry.key,
-          textsHash: entry.textsHash,
+          textHash: entry.textHash,
           contextFingerprint: entry.contextFingerprint ?? null,
         })),
       };

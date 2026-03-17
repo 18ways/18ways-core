@@ -7,15 +7,15 @@ describe('TranslationStore', () => {
       translations: {
         'en-GB': {
           'keep-key': {
-            '["Hello","keep-key"]': ['Hello'],
+            '["Hello","keep-key"]': 'Hello',
           },
           'gc-key': {
-            '["Bye","gc-key"]': ['Bye'],
+            '["Bye","gc-key"]': 'Bye',
           },
         },
         'fr-FR': {
           'gc-key': {
-            '["Bye","gc-key"]': ['Au revoir'],
+            '["Bye","gc-key"]': 'Au revoir',
           },
         },
       },
@@ -26,7 +26,7 @@ describe('TranslationStore', () => {
 
     expect(store.getTranslation('en-GB', 'gc-key', '["Bye","gc-key"]')).toBeUndefined();
     expect(store.getTranslation('fr-FR', 'gc-key', '["Bye","gc-key"]')).toBeUndefined();
-    expect(store.getTranslation('en-GB', 'keep-key', '["Hello","keep-key"]')).toEqual(['Hello']);
+    expect(store.getTranslation('en-GB', 'keep-key', '["Hello","keep-key"]')).toEqual('Hello');
   });
 
   it('captures same-locale observations once per context fingerprint without entering loading state', async () => {
@@ -34,10 +34,10 @@ describe('TranslationStore', () => {
       data: entries.map((entry) => ({
         locale: entry.targetLocale,
         key: entry.key,
-        textsHash: entry.textsHash,
+        textHash: entry.textHash,
         contextFingerprint: entry.contextFingerprint ?? null,
         translationId: 'group-1',
-        translation: ['Hola'],
+        translation: 'Hola',
       })),
       errors: [],
     }));
@@ -45,7 +45,7 @@ describe('TranslationStore', () => {
       translations: {
         'es-ES': {
           cta: {
-            hash_1: ['Hola'],
+            hash_1: 'Hola',
           },
         },
       },
@@ -57,8 +57,8 @@ describe('TranslationStore', () => {
         baseLocale: 'es-ES',
         targetLocale: 'es-ES',
         key: 'cta',
-        textsHash: 'hash_1',
-        texts: ['Hello'],
+        textHash: 'hash_1',
+        text: 'Hello',
         contextFingerprint: 'fingerprint-a',
       })
     ).toBe(true);
@@ -71,7 +71,7 @@ describe('TranslationStore', () => {
       store.hasCompletedEntry({
         targetLocale: 'es-ES',
         key: 'cta',
-        textsHash: 'hash_1',
+        textHash: 'hash_1',
         contextFingerprint: 'fingerprint-a',
       })
     ).toBe(true);
@@ -80,8 +80,8 @@ describe('TranslationStore', () => {
         baseLocale: 'es-ES',
         targetLocale: 'es-ES',
         key: 'cta',
-        textsHash: 'hash_1',
-        texts: ['Hello'],
+        textHash: 'hash_1',
+        text: 'Hello',
         contextFingerprint: 'fingerprint-a',
       })
     ).toBe(false);
@@ -90,8 +90,8 @@ describe('TranslationStore', () => {
         baseLocale: 'es-ES',
         targetLocale: 'es-ES',
         key: 'cta',
-        textsHash: 'hash_1',
-        texts: ['Hello'],
+        textHash: 'hash_1',
+        text: 'Hello',
         contextFingerprint: 'fingerprint-b',
       })
     ).toBe(true);
@@ -106,10 +106,10 @@ describe('TranslationStore', () => {
       data: entries.map((entry) => ({
         locale: entry.targetLocale,
         key: entry.key,
-        textsHash: entry.textsHash,
+        textHash: entry.textHash,
         contextFingerprint: entry.contextFingerprint ?? null,
         translationId: 'group-1',
-        translation: ['Hola'],
+        translation: 'Hola',
       })),
       errors: [],
     }));
@@ -117,7 +117,7 @@ describe('TranslationStore', () => {
       translations: {
         'es-ES': {
           cta: {
-            hash_1: ['Hola'],
+            hash_1: 'Hola',
           },
         },
       },
@@ -128,8 +128,8 @@ describe('TranslationStore', () => {
       baseLocale: 'es-ES',
       targetLocale: 'es-ES',
       key: 'cta',
-      textsHash: 'hash_1',
-      texts: ['Hello'],
+      textHash: 'hash_1',
+      text: 'Hello',
       contextFingerprint: 'fingerprint-a',
     });
     await store.waitForIdle();
@@ -141,8 +141,8 @@ describe('TranslationStore', () => {
         baseLocale: 'es-ES',
         targetLocale: 'es-ES',
         key: 'cta',
-        textsHash: 'hash_1',
-        texts: ['Hello'],
+        textHash: 'hash_1',
+        text: 'Hello',
         contextFingerprint: 'fingerprint-a',
       })
     ).toBe(true);
@@ -156,7 +156,7 @@ describe('TranslationStore', () => {
         {
           locale: 'es-ES',
           key: 'cta',
-          textsHash: 'hash_1',
+          textHash: 'hash_1',
         },
       ],
     }));
@@ -169,8 +169,8 @@ describe('TranslationStore', () => {
       store.enqueue({
         targetLocale: 'es-ES',
         key: 'cta',
-        textsHash: 'hash_1',
-        texts: ['Hello'],
+        textHash: 'hash_1',
+        text: 'Hello',
         contextFingerprint: 'fingerprint-a',
       })
     ).toBe(true);
@@ -182,8 +182,8 @@ describe('TranslationStore', () => {
       store.enqueue({
         targetLocale: 'es-ES',
         key: 'cta',
-        textsHash: 'hash_1',
-        texts: ['Hello'],
+        textHash: 'hash_1',
+        text: 'Hello',
         contextFingerprint: 'fingerprint-a',
       })
     ).toBe(false);

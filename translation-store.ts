@@ -22,8 +22,8 @@ type FetchTranslationsFn = (
 const ERROR_CACHE_TTL_MS = 1000 * 60;
 
 const translationEntryTriple = (
-  entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textsHash'>
-) => JSON.stringify([entry.targetLocale, entry.key, entry.textsHash]);
+  entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textHash'>
+) => JSON.stringify([entry.targetLocale, entry.key, entry.textHash]);
 
 const isCaptureEntry = (
   entry: Pick<InProgressTranslation, 'baseLocale' | 'targetLocale'>
@@ -32,12 +32,12 @@ const isCaptureEntry = (
 };
 
 export const translationEntryId = (
-  entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textsHash' | 'contextFingerprint'>
+  entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textHash' | 'contextFingerprint'>
 ) =>
   JSON.stringify([
     entry.targetLocale,
     entry.key,
-    entry.textsHash,
+    entry.textHash,
     normalizeTranslationContextFingerprint(entry.contextFingerprint),
   ]);
 
@@ -116,14 +116,14 @@ export class TranslationStore {
 
   hasPendingRequestsForKey = (key: string): boolean => (this.pendingByKey.get(key) ?? 0) > 0;
 
-  getTranslation = (locale: string, key: string, textsHash: string): string[] | undefined => {
-    return getPath(this.translations, [locale, key, textsHash]) as string[] | undefined;
+  getTranslation = (locale: string, key: string, textHash: string): string | undefined => {
+    return getPath(this.translations, [locale, key, textHash]) as string | undefined;
   };
 
   isInFlight = (id: string): boolean => this.inFlight.has(id);
 
   hasCompletedEntry = (
-    entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textsHash' | 'contextFingerprint'>
+    entry: Pick<InProgressTranslation, 'targetLocale' | 'key' | 'textHash' | 'contextFingerprint'>
   ): boolean => this.completed.has(translationEntryId(entry));
 
   isErrorCached = (id: string): boolean => {
@@ -139,7 +139,7 @@ export class TranslationStore {
     this.emit(true);
   };
 
-  setCompletedTranslation = (keyPath: string[], translation: string[]): void => {
+  setCompletedTranslation = (keyPath: string[], translation: string): void => {
     set(this.translations, keyPath, translation);
     this.emit(true);
   };
@@ -194,7 +194,7 @@ export class TranslationStore {
     }
 
     const hasCachedTranslation = Boolean(
-      this.getTranslation(entry.targetLocale, entry.key, entry.textsHash)
+      this.getTranslation(entry.targetLocale, entry.key, entry.textHash)
     );
 
     if (!captureEntry && hasCachedTranslation) {
@@ -317,30 +317,30 @@ export class TranslationStore {
         const successfulRequestIds = new Set<string>();
         const successfulRequestTriples = new Set<string>();
 
-        result.data.forEach(({ locale, key, textsHash, translation, contextFingerprint }) => {
-          set(this.translations, [locale, key, textsHash], translation);
+        result.data.forEach(({ locale, key, textHash, translation, contextFingerprint }) => {
+          set(this.translations, [locale, key, textHash], translation);
           successfulRequestTriples.add(
             translationEntryTriple({
               targetLocale: locale,
               key,
-              textsHash,
+              textHash,
             })
           );
           successfulRequestIds.add(
             translationEntryId({
               targetLocale: locale,
               key,
-              textsHash,
+              textHash,
               contextFingerprint: contextFingerprint ?? undefined,
             })
           );
         });
 
-        result.errors.forEach(({ locale, key, textsHash, contextFingerprint }) => {
+        result.errors.forEach(({ locale, key, textHash, contextFingerprint }) => {
           const id = translationEntryId({
             targetLocale: locale,
             key,
-            textsHash,
+            textHash,
             contextFingerprint: contextFingerprint ?? undefined,
           });
           this.errorCache.set(id, Date.now() + ERROR_CACHE_TTL_MS);

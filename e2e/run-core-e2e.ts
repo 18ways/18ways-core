@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { create18waysEngine } from '@18ways/core/engine';
 import type { InProgressTranslation } from '@18ways/core/common';
-import { encryptTranslationValues } from '@18ways/core/crypto';
+import { encryptTranslationValue } from '@18ways/core/crypto';
 
 const SOURCE_TEXTS = ['Hello world', 'Try changing language', 'Hello {name}'] as const;
 
@@ -67,20 +67,18 @@ const run = async () => {
 
     const data = items.map((item) => {
       fetchCalls.push({ targetLocale: item.targetLocale, key: item.key });
-      const translatedTexts = item.texts.map(
-        (sourceText) => TRANSLATION_TABLE[item.targetLocale]?.[sourceText] || sourceText
-      );
+      const translatedText = TRANSLATION_TABLE[item.targetLocale]?.[item.text] || item.text;
 
       return {
         locale: item.targetLocale,
         key: item.key,
-        textsHash: item.textsHash,
-        translation: encryptTranslationValues({
-          translatedTexts,
-          sourceTexts: item.texts,
+        textHash: item.textHash,
+        translation: encryptTranslationValue({
+          translatedText,
+          sourceText: item.text,
           locale: item.targetLocale,
           key: item.key,
-          textsHash: item.textsHash,
+          textHash: item.textHash,
         }),
       };
     });

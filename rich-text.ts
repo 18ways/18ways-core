@@ -85,13 +85,8 @@ export const isRichTextValue = (value: unknown): value is RichTextValue => {
   );
 };
 
-export const parseTranslationTexts = (value: unknown): string[] | null => {
-  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
-    return value;
-  }
-
-  return null;
-};
+export const parseTranslationText = (value: unknown): string | null =>
+  typeof value === 'string' ? value : null;
 
 export const serializeRichTextToMarkup = (nodes: RichTextNode[]): string =>
   nodes

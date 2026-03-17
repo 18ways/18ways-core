@@ -1,5 +1,5 @@
 import {
-  buildTranslationFallbackValues,
+  buildTranslationFallbackValue,
   DEFAULT_TRANSLATION_FALLBACK_CONFIG,
   fetchConfig,
   fetchTranslations,
@@ -14,7 +14,7 @@ import {
   type TranslationContextInputObject,
   type Translations,
 } from './common';
-import { decryptTranslationValues } from './crypto';
+import { decryptTranslationValue } from './crypto';
 import { canonicalizeLocale } from './i18n-shared';
 import { formatWaysParser, isRuntimeOnlyWaysMessage } from './parsers/ways-parser';
 import { TranslationStore } from './translation-store';
@@ -122,14 +122,13 @@ export class WaysEngine {
     const baseLocale = canonicalizeLocale(options.baseLocale || this.baseLocale);
     const targetLocale = canonicalizeLocale(options.locale || this.targetLocale);
     const contextKey = normalizeContextKey(options.context || this.contextKey);
-    const texts = [sourceText];
-    const textsHash = generateHashId([...texts, contextKey]);
+    const textHash = generateHashId([sourceText, contextKey]);
     const entry: InProgressTranslation = {
       key: contextKey,
-      textsHash,
+      textHash,
       baseLocale,
       targetLocale,
-      texts,
+      text: sourceText,
     };
 
     if (isRuntimeOnlyWaysMessage(sourceText)) {
@@ -142,18 +141,18 @@ export class WaysEngine {
     }
 
     const tryReadCached = (): string | null => {
-      const cached = this.store.getTranslation(targetLocale, contextKey, textsHash);
+      const cached = this.store.getTranslation(targetLocale, contextKey, textHash);
       if (!cached) {
         return null;
       }
 
       try {
-        const [decrypted] = decryptTranslationValues({
-          encryptedTexts: cached,
-          sourceTexts: texts,
+        const decrypted = decryptTranslationValue({
+          encryptedText: cached,
+          sourceText,
           locale: targetLocale,
           key: contextKey,
-          textsHash,
+          textHash,
         });
         return typeof decrypted === 'string' ? decrypted : sourceText;
       } catch (error) {
@@ -175,12 +174,11 @@ export class WaysEngine {
     }
 
     const translationFallbackConfig = await this.getTranslationFallbackConfig();
-    const fallbackValues = buildTranslationFallbackValues(
+    const translatedFallback = buildTranslationFallbackValue(
       resolveTranslationFallbackMode(translationFallbackConfig, targetLocale),
-      texts,
+      sourceText,
       contextKey
     );
-    const translatedFallback = fallbackValues[0] ?? sourceText;
 
     return formatWithVars(translatedFallback, options.vars, targetLocale);
   };
