@@ -76,42 +76,115 @@ const recognizePreferredLocales = (candidates: string[]): string[] => {
 
 const isLanguageOnlyLocale = (locale: string): boolean => !locale.includes('-');
 
+const normalizeAcceptedLocales = (acceptedLocales?: string[]): string[] => {
+  if (!acceptedLocales?.length) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      acceptedLocales
+        .map((locale) => recognizeLocale(locale))
+        .filter((locale): locale is string => Boolean(locale))
+        .map((locale) => canonicalizeLocale(locale))
+    )
+  );
+};
+
+type SupportedLocalePreferenceMatch = {
+  candidate: string;
+  directMatches: string[];
+  fallbackMatches: string[];
+};
+
+const collectSupportedLocalePreferenceMatches = (
+  candidates: string[],
+  supportedLocales?: string[]
+): SupportedLocalePreferenceMatch[] => {
+  const recognizedCandidates = recognizePreferredLocales(candidates);
+  const normalizedSupportedLocales = normalizeAcceptedLocales(supportedLocales);
+
+  return recognizedCandidates.map((candidate) => {
+    if (!normalizedSupportedLocales.length) {
+      return {
+        candidate,
+        directMatches: [candidate],
+        fallbackMatches: [],
+      };
+    }
+
+    if (isLanguageOnlyLocale(candidate)) {
+      const directMatches = normalizedSupportedLocales.filter(
+        (locale) => findSupportedLocale(candidate, [locale]) === locale
+      );
+
+      return {
+        candidate,
+        directMatches,
+        fallbackMatches: [],
+      };
+    }
+
+    const exactMatch = findExactSupportedLocale(candidate, normalizedSupportedLocales);
+    const fallbackMatches = normalizedSupportedLocales.filter(
+      (locale) =>
+        locale.toLowerCase() !== exactMatch?.toLowerCase() &&
+        findSupportedLocale(candidate, [locale]) === locale
+    );
+
+    return {
+      candidate,
+      directMatches: exactMatch ? [exactMatch] : [],
+      fallbackMatches: exactMatch ? fallbackMatches : [...fallbackMatches],
+    };
+  });
+};
+
+export const rankSupportedLocalesByPreference = (
+  candidates: string[],
+  supportedLocales?: string[]
+): string[] => {
+  const rankedLocales: string[] = [];
+  const seenLocales = new Set<string>();
+  const addLocale = (locale: string | null) => {
+    if (!locale) {
+      return;
+    }
+
+    const canonical = canonicalizeLocale(locale);
+    const key = canonical.toLowerCase();
+    if (seenLocales.has(key)) {
+      return;
+    }
+
+    seenLocales.add(key);
+    rankedLocales.push(canonical);
+  };
+
+  for (const match of collectSupportedLocalePreferenceMatches(candidates, supportedLocales)) {
+    for (const locale of [...match.directMatches, ...match.fallbackMatches]) {
+      addLocale(locale);
+    }
+  }
+
+  return rankedLocales;
+};
+
 const resolvePreferredLocaleFromCandidates = (
   candidates: string[],
   context: Pick<LocaleDriverContext, 'acceptedLocales'>
 ): string | null => {
-  const recognizedCandidates = recognizePreferredLocales(candidates);
-  if (!recognizedCandidates.length) {
-    return null;
-  }
+  const matches = collectSupportedLocalePreferenceMatches(candidates, context.acceptedLocales);
 
-  if (!context.acceptedLocales?.length) {
-    return recognizedCandidates[0] || null;
-  }
-
-  for (const candidate of recognizedCandidates) {
-    if (isLanguageOnlyLocale(candidate)) {
-      const directLanguageMatch = findSupportedLocale(candidate, context.acceptedLocales);
-      if (directLanguageMatch) {
-        return directLanguageMatch;
-      }
-      continue;
-    }
-
-    const exactTagMatch = findExactSupportedLocale(candidate, context.acceptedLocales);
-    if (exactTagMatch) {
-      return exactTagMatch;
+  for (const match of matches) {
+    if (match.directMatches[0]) {
+      return match.directMatches[0];
     }
   }
 
-  for (const candidate of recognizedCandidates) {
-    if (isLanguageOnlyLocale(candidate)) {
-      continue;
-    }
-
-    const fallback = findSupportedLocale(candidate, context.acceptedLocales);
-    if (fallback) {
-      return fallback;
+  for (const match of matches) {
+    if (match.fallbackMatches[0]) {
+      return match.fallbackMatches[0];
     }
   }
 
@@ -289,21 +362,6 @@ export const SessionCookieDriver: LocaleDriver<LocaleDriverContext> = {
     }
   },
   handleListeners: () => {},
-};
-
-const normalizeAcceptedLocales = (acceptedLocales?: string[]): string[] => {
-  if (!acceptedLocales?.length) {
-    return [];
-  }
-
-  return Array.from(
-    new Set(
-      acceptedLocales
-        .map((locale) => recognizeLocale(locale))
-        .filter((locale): locale is string => Boolean(locale))
-        .map((locale) => canonicalizeLocale(locale))
-    )
-  );
 };
 
 export const createLocaleDrivers = <TContext extends LocaleDriverContext>(

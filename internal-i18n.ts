@@ -1,7 +1,12 @@
 export type InternalMessageKey =
   | 'selectLanguageCurrent'
   | 'changingLanguage'
-  | 'availableLanguages';
+  | 'availableLanguages'
+  | 'suggestedLanguages'
+  | 'allLanguages'
+  | 'searchAvailableLanguages'
+  | 'searchLanguagesPlaceholder'
+  | 'noMatchingLanguages';
 
 type InternalMessageSet = Record<InternalMessageKey, string>;
 
@@ -9,204 +14,374 @@ const EN_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Select language. Current language: {name}',
   changingLanguage: 'Changing language',
   availableLanguages: 'Available languages',
+  suggestedLanguages: 'Suggested',
+  allLanguages: 'All languages',
+  searchAvailableLanguages: 'Search available languages',
+  searchLanguagesPlaceholder: 'Search languages',
+  noMatchingLanguages: 'No matching languages',
 };
 
 const ES_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Seleccionar idioma. Idioma actual: {name}',
   changingLanguage: 'Cambiando idioma',
   availableLanguages: 'Idiomas disponibles',
+  suggestedLanguages: 'Sugeridos',
+  allLanguages: 'Todos los idiomas',
+  searchAvailableLanguages: 'Buscar idiomas disponibles',
+  searchLanguagesPlaceholder: 'Buscar idiomas',
+  noMatchingLanguages: 'No hay idiomas coincidentes',
 };
 
 const FR_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Choisir la langue. Langue actuelle : {name}',
   changingLanguage: 'Changement de langue',
   availableLanguages: 'Langues disponibles',
+  suggestedLanguages: 'Suggestions',
+  allLanguages: 'Toutes les langues',
+  searchAvailableLanguages: 'Rechercher parmi les langues',
+  searchLanguagesPlaceholder: 'Rechercher des langues',
+  noMatchingLanguages: 'Aucune langue correspondante',
 };
 
 const DE_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Sprache auswählen. Aktuelle Sprache: {name}',
   changingLanguage: 'Sprache wird geändert',
   availableLanguages: 'Verfügbare Sprachen',
+  suggestedLanguages: 'Empfohlen',
+  allLanguages: 'Alle Sprachen',
+  searchAvailableLanguages: 'Verfügbare Sprachen durchsuchen',
+  searchLanguagesPlaceholder: 'Sprachen suchen',
+  noMatchingLanguages: 'Keine passenden Sprachen',
 };
 
 const IT_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Seleziona lingua. Lingua corrente: {name}',
   changingLanguage: 'Cambio lingua in corso',
   availableLanguages: 'Lingue disponibili',
+  suggestedLanguages: 'Suggerite',
+  allLanguages: 'Tutte le lingue',
+  searchAvailableLanguages: 'Cerca tra le lingue disponibili',
+  searchLanguagesPlaceholder: 'Cerca lingue',
+  noMatchingLanguages: 'Nessuna lingua corrispondente',
 };
 
 const PT_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Selecionar idioma. Idioma atual: {name}',
   changingLanguage: 'Alterando idioma',
   availableLanguages: 'Idiomas disponíveis',
+  suggestedLanguages: 'Sugeridos',
+  allLanguages: 'Todos os idiomas',
+  searchAvailableLanguages: 'Pesquisar idiomas disponíveis',
+  searchLanguagesPlaceholder: 'Pesquisar idiomas',
+  noMatchingLanguages: 'Nenhum idioma correspondente',
 };
 
 const NL_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Selecteer taal. Huidige taal: {name}',
   changingLanguage: 'Taal wordt gewijzigd',
   availableLanguages: 'Beschikbare talen',
+  suggestedLanguages: 'Aanbevolen',
+  allLanguages: 'Alle talen',
+  searchAvailableLanguages: 'Beschikbare talen zoeken',
+  searchLanguagesPlaceholder: 'Talen zoeken',
+  noMatchingLanguages: 'Geen overeenkomende talen',
 };
 
 const RU_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Выберите язык. Текущий язык: {name}',
   changingLanguage: 'Смена языка',
   availableLanguages: 'Доступные языки',
+  suggestedLanguages: 'Рекомендуемые',
+  allLanguages: 'Все языки',
+  searchAvailableLanguages: 'Поиск доступных языков',
+  searchLanguagesPlaceholder: 'Поиск языков',
+  noMatchingLanguages: 'Подходящие языки не найдены',
 };
 
 const JA_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: '言語を選択。現在の言語: {name}',
   changingLanguage: '言語を変更中',
   availableLanguages: '利用可能な言語',
+  suggestedLanguages: 'おすすめ',
+  allLanguages: 'すべての言語',
+  searchAvailableLanguages: '利用可能な言語を検索',
+  searchLanguagesPlaceholder: '言語を検索',
+  noMatchingLanguages: '一致する言語がありません',
 };
 
 const ZH_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: '选择语言。当前语言：{name}',
   changingLanguage: '正在切换语言',
   availableLanguages: '可用语言',
+  suggestedLanguages: '推荐',
+  allLanguages: '所有语言',
+  searchAvailableLanguages: '搜索可用语言',
+  searchLanguagesPlaceholder: '搜索语言',
+  noMatchingLanguages: '没有匹配的语言',
 };
 
 const KO_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: '언어 선택. 현재 언어: {name}',
   changingLanguage: '언어 변경 중',
   availableLanguages: '사용 가능한 언어',
+  suggestedLanguages: '추천',
+  allLanguages: '모든 언어',
+  searchAvailableLanguages: '사용 가능한 언어 검색',
+  searchLanguagesPlaceholder: '언어 검색',
+  noMatchingLanguages: '일치하는 언어가 없습니다',
 };
 
 const AR_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'اختر اللغة. اللغة الحالية: {name}',
   changingLanguage: 'جارٍ تغيير اللغة',
   availableLanguages: 'اللغات المتاحة',
+  suggestedLanguages: 'مقترحة',
+  allLanguages: 'كل اللغات',
+  searchAvailableLanguages: 'ابحث في اللغات المتاحة',
+  searchLanguagesPlaceholder: 'ابحث عن اللغات',
+  noMatchingLanguages: 'لا توجد لغات مطابقة',
 };
 
 const HI_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'भाषा चुनें। वर्तमान भाषा: {name}',
   changingLanguage: 'भाषा बदली जा रही है',
   availableLanguages: 'उपलब्ध भाषाएँ',
+  suggestedLanguages: 'सुझाई गई',
+  allLanguages: 'सभी भाषाएँ',
+  searchAvailableLanguages: 'उपलब्ध भाषाएँ खोजें',
+  searchLanguagesPlaceholder: 'भाषाएँ खोजें',
+  noMatchingLanguages: 'कोई मेल खाती भाषा नहीं',
 };
 
 const BN_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'ভাষা নির্বাচন করুন। বর্তমান ভাষা: {name}',
   changingLanguage: 'ভাষা পরিবর্তন হচ্ছে',
   availableLanguages: 'উপলব্ধ ভাষাসমূহ',
+  suggestedLanguages: 'প্রস্তাবিত',
+  allLanguages: 'সব ভাষা',
+  searchAvailableLanguages: 'উপলভ্য ভাষা খুঁজুন',
+  searchLanguagesPlaceholder: 'ভাষা খুঁজুন',
+  noMatchingLanguages: 'মিল পাওয়া ভাষা নেই',
 };
 
 const PA_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'ਭਾਸ਼ਾ ਚੁਣੋ। ਮੌਜੂਦਾ ਭਾਸ਼ਾ: {name}',
   changingLanguage: 'ਭਾਸ਼ਾ ਬਦਲੀ ਜਾ ਰਹੀ ਹੈ',
   availableLanguages: 'ਉਪਲਬਧ ਭਾਸ਼ਾਵਾਂ',
+  suggestedLanguages: 'ਸੁਝਾਈਆਂ',
+  allLanguages: 'ਸਾਰੀਆਂ ਭਾਸ਼ਾਵਾਂ',
+  searchAvailableLanguages: 'ਉਪਲਬਧ ਭਾਸ਼ਾਵਾਂ ਖੋਜੋ',
+  searchLanguagesPlaceholder: 'ਭਾਸ਼ਾਵਾਂ ਖੋਜੋ',
+  noMatchingLanguages: 'ਕੋਈ ਮਿਲਦੀ ਭਾਸ਼ਾ ਨਹੀਂ',
 };
 
 const VI_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Chọn ngôn ngữ. Ngôn ngữ hiện tại: {name}',
   changingLanguage: 'Đang đổi ngôn ngữ',
   availableLanguages: 'Ngôn ngữ khả dụng',
+  suggestedLanguages: 'Đề xuất',
+  allLanguages: 'Tất cả ngôn ngữ',
+  searchAvailableLanguages: 'Tìm ngôn ngữ khả dụng',
+  searchLanguagesPlaceholder: 'Tìm ngôn ngữ',
+  noMatchingLanguages: 'Không có ngôn ngữ phù hợp',
 };
 
 const TH_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'เลือกภาษา ภาษาปัจจุบัน: {name}',
   changingLanguage: 'กำลังเปลี่ยนภาษา',
   availableLanguages: 'ภาษาที่ใช้ได้',
+  suggestedLanguages: 'แนะนำ',
+  allLanguages: 'ภาษาทั้งหมด',
+  searchAvailableLanguages: 'ค้นหาภาษาที่ใช้ได้',
+  searchLanguagesPlaceholder: 'ค้นหาภาษา',
+  noMatchingLanguages: 'ไม่พบภาษาที่ตรงกัน',
 };
 
 const TR_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Dil seçin. Geçerli dil: {name}',
   changingLanguage: 'Dil değiştiriliyor',
   availableLanguages: 'Kullanılabilir diller',
+  suggestedLanguages: 'Önerilen',
+  allLanguages: 'Tüm diller',
+  searchAvailableLanguages: 'Kullanılabilir dilleri ara',
+  searchLanguagesPlaceholder: 'Dil ara',
+  noMatchingLanguages: 'Eşleşen dil yok',
 };
 
 const PL_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Wybierz język. Bieżący język: {name}',
   changingLanguage: 'Zmiana języka',
   availableLanguages: 'Dostępne języki',
+  suggestedLanguages: 'Sugerowane',
+  allLanguages: 'Wszystkie języki',
+  searchAvailableLanguages: 'Szukaj dostępnych języków',
+  searchLanguagesPlaceholder: 'Szukaj języków',
+  noMatchingLanguages: 'Brak pasujących języków',
 };
 
 const UK_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Оберіть мову. Поточна мова: {name}',
   changingLanguage: 'Зміна мови',
   availableLanguages: 'Доступні мови',
+  suggestedLanguages: 'Рекомендовані',
+  allLanguages: 'Усі мови',
+  searchAvailableLanguages: 'Пошук доступних мов',
+  searchLanguagesPlaceholder: 'Пошук мов',
+  noMatchingLanguages: 'Немає відповідних мов',
 };
 
 const CS_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Vyberte jazyk. Aktuální jazyk: {name}',
   changingLanguage: 'Mění se jazyk',
   availableLanguages: 'Dostupné jazyky',
+  suggestedLanguages: 'Doporučené',
+  allLanguages: 'Všechny jazyky',
+  searchAvailableLanguages: 'Hledat dostupné jazyky',
+  searchLanguagesPlaceholder: 'Hledat jazyky',
+  noMatchingLanguages: 'Žádné odpovídající jazyky',
 };
 
 const SV_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Välj språk. Nuvarande språk: {name}',
   changingLanguage: 'Byter språk',
   availableLanguages: 'Tillgängliga språk',
+  suggestedLanguages: 'Rekommenderade',
+  allLanguages: 'Alla språk',
+  searchAvailableLanguages: 'Sök tillgängliga språk',
+  searchLanguagesPlaceholder: 'Sök språk',
+  noMatchingLanguages: 'Inga matchande språk',
 };
 
 const DA_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Vælg sprog. Nuværende sprog: {name}',
   changingLanguage: 'Skifter sprog',
   availableLanguages: 'Tilgængelige sprog',
+  suggestedLanguages: 'Anbefalede',
+  allLanguages: 'Alle sprog',
+  searchAvailableLanguages: 'Søg tilgængelige sprog',
+  searchLanguagesPlaceholder: 'Søg sprog',
+  noMatchingLanguages: 'Ingen matchende sprog',
 };
 
 const FI_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Valitse kieli. Nykyinen kieli: {name}',
   changingLanguage: 'Vaihdetaan kieltä',
   availableLanguages: 'Saatavilla olevat kielet',
+  suggestedLanguages: 'Suositellut',
+  allLanguages: 'Kaikki kielet',
+  searchAvailableLanguages: 'Hae saatavilla olevia kieliä',
+  searchLanguagesPlaceholder: 'Hae kieliä',
+  noMatchingLanguages: 'Ei vastaavia kieliä',
 };
 
 const NO_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Velg språk. Nåværende språk: {name}',
   changingLanguage: 'Bytter språk',
   availableLanguages: 'Tilgjengelige språk',
+  suggestedLanguages: 'Anbefalte',
+  allLanguages: 'Alle språk',
+  searchAvailableLanguages: 'Søk tilgjengelige språk',
+  searchLanguagesPlaceholder: 'Søk språk',
+  noMatchingLanguages: 'Ingen samsvarende språk',
 };
 
 const EL_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Επιλέξτε γλώσσα. Τρέχουσα γλώσσα: {name}',
   changingLanguage: 'Αλλαγή γλώσσας',
   availableLanguages: 'Διαθέσιμες γλώσσες',
+  suggestedLanguages: 'Προτεινόμενες',
+  allLanguages: 'Όλες οι γλώσσες',
+  searchAvailableLanguages: 'Αναζήτηση διαθέσιμων γλωσσών',
+  searchLanguagesPlaceholder: 'Αναζήτηση γλωσσών',
+  noMatchingLanguages: 'Δεν βρέθηκαν αντίστοιχες γλώσσες',
 };
 
 const HE_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'בחר שפה. השפה הנוכחית: {name}',
   changingLanguage: 'מחליף שפה',
   availableLanguages: 'שפות זמינות',
+  suggestedLanguages: 'מומלצות',
+  allLanguages: 'כל השפות',
+  searchAvailableLanguages: 'חיפוש שפות זמינות',
+  searchLanguagesPlaceholder: 'חיפוש שפות',
+  noMatchingLanguages: 'לא נמצאו שפות תואמות',
 };
 
 const HU_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Nyelv kiválasztása. Jelenlegi nyelv: {name}',
   changingLanguage: 'Nyelv váltása',
   availableLanguages: 'Elérhető nyelvek',
+  suggestedLanguages: 'Ajánlott',
+  allLanguages: 'Összes nyelv',
+  searchAvailableLanguages: 'Elérhető nyelvek keresése',
+  searchLanguagesPlaceholder: 'Nyelvek keresése',
+  noMatchingLanguages: 'Nincs egyező nyelv',
 };
 
 const RO_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Selectează limba. Limba curentă: {name}',
   changingLanguage: 'Se schimbă limba',
   availableLanguages: 'Limbi disponibile',
+  suggestedLanguages: 'Sugestii',
+  allLanguages: 'Toate limbile',
+  searchAvailableLanguages: 'Caută limbile disponibile',
+  searchLanguagesPlaceholder: 'Caută limbi',
+  noMatchingLanguages: 'Nu există limbi potrivite',
 };
 
 const ID_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Pilih bahasa. Bahasa saat ini: {name}',
   changingLanguage: 'Mengubah bahasa',
   availableLanguages: 'Bahasa yang tersedia',
+  suggestedLanguages: 'Disarankan',
+  allLanguages: 'Semua bahasa',
+  searchAvailableLanguages: 'Cari bahasa yang tersedia',
+  searchLanguagesPlaceholder: 'Cari bahasa',
+  noMatchingLanguages: 'Tidak ada bahasa yang cocok',
 };
 
 const MS_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Pilih bahasa. Bahasa semasa: {name}',
   changingLanguage: 'Menukar bahasa',
   availableLanguages: 'Bahasa tersedia',
+  suggestedLanguages: 'Disyorkan',
+  allLanguages: 'Semua bahasa',
+  searchAvailableLanguages: 'Cari bahasa yang tersedia',
+  searchLanguagesPlaceholder: 'Cari bahasa',
+  noMatchingLanguages: 'Tiada bahasa yang sepadan',
 };
 
 const FIL_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Piliin ang wika. Kasalukuyang wika: {name}',
   changingLanguage: 'Pinapalitan ang wika',
   availableLanguages: 'Mga available na wika',
+  suggestedLanguages: 'Iminungkahi',
+  allLanguages: 'Lahat ng wika',
+  searchAvailableLanguages: 'Maghanap ng mga available na wika',
+  searchLanguagesPlaceholder: 'Maghanap ng wika',
+  noMatchingLanguages: 'Walang tumutugmang wika',
 };
 
 const SW_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Chagua lugha. Lugha ya sasa: {name}',
   changingLanguage: 'Inabadilisha lugha',
   availableLanguages: 'Lugha zinazopatikana',
+  suggestedLanguages: 'Yanayopendekezwa',
+  allLanguages: 'Lugha zote',
+  searchAvailableLanguages: 'Tafuta lugha zinazopatikana',
+  searchLanguagesPlaceholder: 'Tafuta lugha',
+  noMatchingLanguages: 'Hakuna lugha inayolingana',
 };
 
 const AF_MESSAGES: InternalMessageSet = {
   selectLanguageCurrent: 'Kies taal. Huidige taal: {name}',
   changingLanguage: 'Taal word verander',
   availableLanguages: 'Beskikbare tale',
+  suggestedLanguages: 'Voorgestel',
+  allLanguages: 'Alle tale',
+  searchAvailableLanguages: 'Soek beskikbare tale',
+  searchLanguagesPlaceholder: 'Soek tale',
+  noMatchingLanguages: 'Geen passende tale',
 };
 
 const INTERNAL_MESSAGES = {

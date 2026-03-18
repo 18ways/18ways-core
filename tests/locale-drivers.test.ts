@@ -4,6 +4,7 @@ import {
   SessionCookieDriver,
   createLocaleDrivers,
   createLocaleEngine,
+  rankSupportedLocalesByPreference,
   readPreferredLocalesFromAcceptLanguageHeader,
   type LocaleDriverContext,
 } from '../locale-drivers';
@@ -142,6 +143,32 @@ describe('readPreferredLocalesFromAcceptLanguageHeader', () => {
 
   it('skips q=0 and wildcard entries', () => {
     expect(readPreferredLocalesFromAcceptLanguageHeader('*, fr-FR;q=0, en;q=0.8')).toEqual(['en']);
+  });
+});
+
+describe('rankSupportedLocalesByPreference', () => {
+  it('returns exact matches first and then related supported locales for each candidate', () => {
+    expect(
+      rankSupportedLocalesByPreference(
+        ['fr-FR', 'en-GB'],
+        ['en-GB', 'en-US', 'fr-FR', 'fr-CA', 'de-DE']
+      )
+    ).toEqual(['fr-FR', 'fr-CA', 'en-GB', 'en-US']);
+  });
+
+  it('expands language-only candidates to every supported locale in that language', () => {
+    expect(
+      rankSupportedLocalesByPreference(
+        ['en', 'fr-FR'],
+        ['en-GB', 'en-US', 'fr-FR', 'fr-CA', 'de-DE']
+      )
+    ).toEqual(['en-GB', 'en-US', 'fr-FR', 'fr-CA']);
+  });
+
+  it('deduplicates overlapping candidates and skips unrecognized entries', () => {
+    expect(
+      rankSupportedLocalesByPreference(['fr-FR', 'fr', 'bogus', 'fr-CA'], ['fr-FR', 'fr-CA'])
+    ).toEqual(['fr-FR', 'fr-CA']);
   });
 });
 
