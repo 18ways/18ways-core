@@ -33,4 +33,6 @@ const cta = await ways.t('Pay now', {
 });
 ```
 
+A runnable minimal site lives in `examples/basic/`.
+
 Docs: [18ways.com/docs](https://18ways.com/docs)
