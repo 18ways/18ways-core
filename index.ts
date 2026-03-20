@@ -13,3 +13,4 @@ export * from './internal-i18n';
 export * from './engine';
 export * from './parsers/ways-parser';
 export * from './parsers/intl-runtime';
+export * from './translation-structure';

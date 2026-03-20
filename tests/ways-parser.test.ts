@@ -1,5 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { isRuntimeOnlyWaysMessage } from '../parsers/ways-parser';
+import { inspectWaysMessage, isRuntimeOnlyWaysMessage } from '../parsers/ways-parser';
+
+describe('inspectWaysMessage', () => {
+  it('captures formatter structure without caring about literal text', () => {
+    const inspected = inspectWaysMessage(
+      '{count, plural, =0{No messages} one{{count} message} other{{count} messages}}'
+    );
+
+    expect(inspected.valid).toBe(true);
+    if (!inspected.valid) {
+      return;
+    }
+
+    expect(inspected.hasExpressions).toBe(true);
+    expect(inspected.structure).toContain('"formatType":"plural"');
+    expect(inspected.structure).toContain('"name":"count"');
+  });
+
+  it('returns parser errors for invalid formatter syntax', () => {
+    expect(inspectWaysMessage('Hello {name')).toEqual({
+      valid: false,
+      hasExpressions: false,
+      structure: null,
+      nodes: null,
+      error: 'Unclosed formatter expression in message.',
+    });
+  });
+});
 
 describe('isRuntimeOnlyWaysMessage', () => {
   it('treats bare placeholders as runtime-only', () => {

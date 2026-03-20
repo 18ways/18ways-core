@@ -66,6 +66,10 @@
       "types": "./engine.ts",
       "import": "./engine.ts"
     },
+    "./translation-structure": {
+      "types": "./translation-structure.ts",
+      "import": "./translation-structure.ts"
+    },
     "./rich-text": {
       "types": "./rich-text.ts",
       "import": "./rich-text.ts"

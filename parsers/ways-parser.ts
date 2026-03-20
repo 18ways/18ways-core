@@ -9,6 +9,57 @@ import {
   selectPluralCategory,
 } from './intl-runtime';
 
+export type WaysTextNode = {
+  type: 'text';
+  value: string;
+};
+
+export type WaysArgumentNode = {
+  type: 'argument';
+  name: string;
+};
+
+export type WaysFormatNode = {
+  type: 'format';
+  name: string;
+  formatType: string;
+  args: string[];
+};
+
+export type WaysBranchNode = {
+  type: 'branch';
+  name: string;
+  formatType: 'plural' | 'select';
+  options: Record<string, WaysNode[]>;
+};
+
+export type WaysExpressionNode = WaysArgumentNode | WaysFormatNode | WaysBranchNode;
+
+export type WaysNode = WaysTextNode | WaysExpressionNode;
+
+export type WaysInspection =
+  | {
+      valid: true;
+      hasExpressions: boolean;
+      structure: string;
+      nodes: WaysNode[];
+      error: null;
+    }
+  | {
+      valid: false;
+      hasExpressions: false;
+      structure: null;
+      nodes: null;
+      error: string;
+    };
+
+class WaysParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WaysParseError';
+  }
+}
+
 const parseLiteral = (raw: string): string | number | boolean | undefined => {
   const value = raw.trim();
   if (!value) return undefined;
@@ -65,6 +116,37 @@ const splitTopLevel = (value: string, separator: string): string[] => {
   return out;
 };
 
+const splitTopLevelStrict = (value: string, separator: string): string[] => {
+  const out: string[] = [];
+  let depth = 0;
+  let current = '';
+
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    if (ch === '{') depth++;
+    if (ch === '}') depth--;
+
+    if (depth < 0) {
+      throw new WaysParseError('Unexpected closing brace in formatter expression.');
+    }
+
+    if (ch === separator && depth === 0) {
+      out.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (depth !== 0) {
+    throw new WaysParseError('Unbalanced braces in formatter expression.');
+  }
+
+  out.push(current.trim());
+  return out;
+};
+
 const parseOptions = (value: string): Record<string, string> => {
   const options: Record<string, string> = {};
   let i = 0;
@@ -102,69 +184,147 @@ const parseOptions = (value: string): Record<string, string> => {
   return options;
 };
 
+const parseBranchOptions = (value: string): Record<string, string> => {
+  const options: Record<string, string> = {};
+  let i = 0;
+
+  while (i < value.length) {
+    while (i < value.length && /[\s,]/.test(value[i])) i++;
+    if (i >= value.length) break;
+
+    const keyStart = i;
+    while (i < value.length && !/[\s{]/.test(value[i])) i++;
+    const key = value.slice(keyStart, i).trim();
+    if (!key) {
+      throw new WaysParseError('Expected a plural/select branch key.');
+    }
+
+    while (i < value.length && /\s/.test(value[i])) i++;
+    if (value[i] !== '{') {
+      throw new WaysParseError(`Expected a body for branch "${key}".`);
+    }
+
+    i++;
+    let depth = 1;
+    let body = '';
+
+    while (i < value.length && depth > 0) {
+      const ch = value[i];
+      if (ch === '{') {
+        depth++;
+        body += ch;
+      } else if (ch === '}') {
+        depth--;
+        if (depth > 0) {
+          body += ch;
+        }
+      } else {
+        body += ch;
+      }
+      i++;
+    }
+
+    if (depth !== 0) {
+      throw new WaysParseError(`Unclosed body for branch "${key}".`);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(options, key)) {
+      throw new WaysParseError(`Duplicate branch key "${key}".`);
+    }
+
+    options[key] = body;
+  }
+
+  if (Object.keys(options).length === 0) {
+    throw new WaysParseError('Plural/select expressions must define at least one branch.');
+  }
+
+  return options;
+};
+
 const hasNonWhitespaceLiteral = (value: string): boolean => /\S/.test(value);
 
-const isRuntimeOnlyWaysExpression = (expression: string): boolean => {
-  const parts = splitTopLevel(expression, ',');
-  if (!parts.length) return false;
+const parseWaysExpression = (expression: string): WaysExpressionNode => {
+  const parts = splitTopLevelStrict(expression, ',');
+  const name = parts[0]?.trim();
 
-  const arg = parts[0];
-  if (!arg) return false;
+  if (!name) {
+    throw new WaysParseError('Formatter expressions must start with a variable name.');
+  }
 
   if (parts.length === 1) {
-    return true;
+    return {
+      type: 'argument',
+      name,
+    };
   }
 
-  const formatType = parts[1];
-  if (!formatType) return false;
-
-  if (
-    formatType === 'number' ||
-    formatType === 'date' ||
-    formatType === 'datetime' ||
-    formatType === 'list' ||
-    formatType === 'money'
-  ) {
-    return true;
-  }
-
-  if (formatType === 'relativetime' || formatType === 'displayname') {
-    return Boolean(parts[2]?.trim());
+  const formatType = parts[1]?.trim();
+  if (!formatType) {
+    throw new WaysParseError(`Formatter "${name}" is missing a formatter type.`);
   }
 
   if (formatType === 'plural' || formatType === 'select') {
-    const optionValues = Object.values(parseOptions(parts.slice(2).join(',')));
-    return (
-      optionValues.length > 0 && optionValues.every((value) => isRuntimeOnlyWaysMessage(value))
-    );
+    const optionBodies = parseBranchOptions(parts.slice(2).join(','));
+    return {
+      type: 'branch',
+      name,
+      formatType,
+      options: Object.fromEntries(
+        Object.entries(optionBodies).map(([key, body]) => [key, parseWaysMessage(body)])
+      ),
+    };
   }
 
-  return false;
+  return {
+    type: 'format',
+    name,
+    formatType,
+    args: parts
+      .slice(2)
+      .map((part) => part.trim())
+      .filter(Boolean),
+  };
 };
 
-export const isRuntimeOnlyWaysMessage = (text: string): boolean => {
-  let sawExpression = false;
-  let literal = '';
-  let i = 0;
+export const parseWaysMessage = (message: string): WaysNode[] => {
+  const nodes: WaysNode[] = [];
+  let textBuffer = '';
+  let cursor = 0;
 
-  while (i < text.length) {
-    if (text[i] !== '{') {
-      literal += text[i];
-      i++;
+  const flushText = () => {
+    if (!textBuffer) {
+      return;
+    }
+
+    nodes.push({
+      type: 'text',
+      value: textBuffer,
+    });
+    textBuffer = '';
+  };
+
+  while (cursor < message.length) {
+    const current = message[cursor];
+
+    if (current === '}') {
+      throw new WaysParseError('Unexpected closing brace in message.');
+    }
+
+    if (current !== '{') {
+      textBuffer += current;
+      cursor += 1;
       continue;
     }
 
-    if (hasNonWhitespaceLiteral(literal)) {
-      return false;
-    }
-    literal = '';
+    flushText();
 
+    cursor += 1;
     let depth = 1;
     let expression = '';
-    i++;
 
-    while (i < text.length && depth > 0) {
-      const ch = text[i];
+    while (cursor < message.length && depth > 0) {
+      const ch = message[cursor];
       if (ch === '{') {
         depth++;
         expression += ch;
@@ -176,24 +336,123 @@ export const isRuntimeOnlyWaysMessage = (text: string): boolean => {
       } else {
         expression += ch;
       }
-      i++;
+      cursor += 1;
     }
 
     if (depth !== 0) {
-      return false;
+      throw new WaysParseError('Unclosed formatter expression in message.');
     }
 
-    sawExpression = true;
-    if (!isRuntimeOnlyWaysExpression(expression.trim())) {
-      return false;
-    }
+    nodes.push(parseWaysExpression(expression.trim()));
   }
 
-  if (hasNonWhitespaceLiteral(literal)) {
+  flushText();
+
+  return nodes;
+};
+
+const normalizeWaysNode = (node: WaysExpressionNode): unknown => {
+  if (node.type === 'argument') {
+    return {
+      type: node.type,
+      name: node.name,
+    };
+  }
+
+  if (node.type === 'format') {
+    return {
+      type: node.type,
+      name: node.name,
+      formatType: node.formatType,
+      args: node.args,
+    };
+  }
+
+  return {
+    type: node.type,
+    name: node.name,
+    formatType: node.formatType,
+    options: Object.keys(node.options)
+      .sort()
+      .map((key) => [key, normalizeWaysMessage(node.options[key])]),
+  };
+};
+
+const normalizeWaysMessage = (nodes: WaysNode[]): unknown[] =>
+  nodes
+    .filter((node): node is WaysExpressionNode => node.type !== 'text')
+    .map(normalizeWaysNode)
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+
+const serializeWaysMessage = (nodes: WaysNode[]): string =>
+  JSON.stringify(normalizeWaysMessage(nodes));
+
+const hasWaysExpressionNodes = (nodes: WaysNode[]): boolean =>
+  nodes.some((node) => node.type !== 'text');
+
+export const inspectWaysMessage = (text: string): WaysInspection => {
+  try {
+    const nodes = parseWaysMessage(text);
+    return {
+      valid: true,
+      hasExpressions: hasWaysExpressionNodes(nodes),
+      structure: serializeWaysMessage(nodes),
+      nodes,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      valid: false,
+      hasExpressions: false,
+      structure: null,
+      nodes: null,
+      error: error instanceof Error ? error.message : 'Invalid ways formatter syntax.',
+    };
+  }
+};
+
+const isRuntimeOnlyWaysNode = (node: WaysNode): boolean => {
+  if (node.type === 'text') {
+    return !hasNonWhitespaceLiteral(node.value);
+  }
+
+  if (node.type === 'argument') {
+    return true;
+  }
+
+  if (node.type === 'format') {
+    if (
+      node.formatType === 'number' ||
+      node.formatType === 'date' ||
+      node.formatType === 'datetime' ||
+      node.formatType === 'list' ||
+      node.formatType === 'money'
+    ) {
+      return true;
+    }
+
+    if (node.formatType === 'relativetime' || node.formatType === 'displayname') {
+      return Boolean(node.args[0]?.trim());
+    }
+
     return false;
   }
 
-  return sawExpression || text.trim() === '';
+  return Object.values(node.options).every((optionNodes) =>
+    optionNodes.every((optionNode) => isRuntimeOnlyWaysNode(optionNode))
+  );
+};
+
+export const isRuntimeOnlyWaysMessage = (text: string): boolean => {
+  const inspected = inspectWaysMessage(text);
+  if (!inspected.valid) {
+    return false;
+  }
+
+  return (
+    inspected.nodes.every((node) => isRuntimeOnlyWaysNode(node)) &&
+    (inspected.hasExpressions || text.trim() === '')
+  );
 };
 
 export const formatWaysParser = (
