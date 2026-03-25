@@ -42,6 +42,10 @@
       "types": "./locale-drivers.ts",
       "import": "./locale-drivers.ts"
     },
+    "./locale": {
+      "types": "./locale.ts",
+      "import": "./locale.ts"
+    },
     "./locale-engine": {
       "types": "./locale-engine.ts",
       "import": "./locale-engine.ts"
