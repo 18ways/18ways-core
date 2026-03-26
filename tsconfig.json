@@ -18,5 +18,14 @@
     "target": "es2019"
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "dist", "tests", "e2e", "**/*.test.ts", "vitest.config.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-types",
+    "tests",
+    "e2e",
+    "bun-build.ts",
+    "**/*.test.ts",
+    "vitest.config.ts"
+  ]
 }

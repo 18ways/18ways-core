@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { create18waysEngine } from '@18ways/core/engine';
-import type { InProgressTranslation } from '@18ways/core/common';
-import { encryptTranslationValue } from '@18ways/core/crypto';
+import { create18waysEngine } from '../engine';
+import type { InProgressTranslation } from '../common';
+import { encryptTranslationValue } from '../crypto';
 
 const SOURCE_TEXTS = ['Hello world', 'Try changing language', 'Hello {name}'] as const;
 

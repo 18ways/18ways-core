@@ -2,98 +2,118 @@
   "name": "@18ways/core",
   "version": "1.0.1",
   "type": "module",
-  "main": "./index.ts",
-  "module": "./index.ts",
-  "types": "./index.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist-types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.ts",
-      "import": "./index.ts"
+      "types": "./dist-types/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./common": {
-      "types": "./common.ts",
-      "import": "./common.ts"
+      "types": "./dist-types/common.d.ts",
+      "import": "./dist/common.js",
+      "default": "./dist/common.js"
     },
     "./context-fingerprint": {
-      "types": "./context-fingerprint.ts",
-      "import": "./context-fingerprint.ts"
+      "types": "./dist-types/context-fingerprint.d.ts",
+      "import": "./dist/context-fingerprint.js",
+      "default": "./dist/context-fingerprint.js"
     },
     "./client-accepted-locales": {
-      "types": "./client-accepted-locales.ts",
-      "import": "./client-accepted-locales.ts"
+      "types": "./dist-types/client-accepted-locales.d.ts",
+      "import": "./dist/client-accepted-locales.js",
+      "default": "./dist/client-accepted-locales.js"
     },
     "./client-locale-coordination": {
-      "types": "./client-locale-coordination.ts",
-      "import": "./client-locale-coordination.ts"
+      "types": "./dist-types/client-locale-coordination.d.ts",
+      "import": "./dist/client-locale-coordination.js",
+      "default": "./dist/client-locale-coordination.js"
     },
     "./crypto": {
-      "types": "./crypto.ts",
-      "import": "./crypto.ts"
+      "types": "./dist-types/crypto.d.ts",
+      "import": "./dist/crypto.js",
+      "default": "./dist/crypto.js"
     },
     "./cookie-utils": {
-      "types": "./cookie-utils.ts",
-      "import": "./cookie-utils.ts"
+      "types": "./dist-types/cookie-utils.d.ts",
+      "import": "./dist/cookie-utils.js",
+      "default": "./dist/cookie-utils.js"
     },
     "./i18n-shared": {
-      "types": "./i18n-shared.ts",
-      "import": "./i18n-shared.ts"
+      "types": "./dist-types/i18n-shared.d.ts",
+      "import": "./dist/i18n-shared.js",
+      "default": "./dist/i18n-shared.js"
     },
     "./locale-drivers": {
-      "types": "./locale-drivers.ts",
-      "import": "./locale-drivers.ts"
+      "types": "./dist-types/locale-drivers.d.ts",
+      "import": "./dist/locale-drivers.js",
+      "default": "./dist/locale-drivers.js"
     },
     "./locale": {
-      "types": "./locale.ts",
-      "import": "./locale.ts"
+      "types": "./dist-types/locale.d.ts",
+      "import": "./dist/locale.js",
+      "default": "./dist/locale.js"
     },
     "./locale-engine": {
-      "types": "./locale-engine.ts",
-      "import": "./locale-engine.ts"
+      "types": "./dist-types/locale-engine.d.ts",
+      "import": "./dist/locale-engine.js",
+      "default": "./dist/locale-engine.js"
     },
     "./object-utils": {
-      "types": "./object-utils.ts",
-      "import": "./object-utils.ts"
+      "types": "./dist-types/object-utils.d.ts",
+      "import": "./dist/object-utils.js",
+      "default": "./dist/object-utils.js"
     },
     "./path-locale-driver": {
-      "types": "./path-locale-driver.ts",
-      "import": "./path-locale-driver.ts"
+      "types": "./dist-types/path-locale-driver.d.ts",
+      "import": "./dist/path-locale-driver.js",
+      "default": "./dist/path-locale-driver.js"
     },
     "./translation-store": {
-      "types": "./translation-store.ts",
-      "import": "./translation-store.ts"
+      "types": "./dist-types/translation-store.d.ts",
+      "import": "./dist/translation-store.js",
+      "default": "./dist/translation-store.js"
     },
     "./internal-i18n": {
-      "types": "./internal-i18n.ts",
-      "import": "./internal-i18n.ts"
+      "types": "./dist-types/internal-i18n.d.ts",
+      "import": "./dist/internal-i18n.js",
+      "default": "./dist/internal-i18n.js"
     },
     "./engine": {
-      "types": "./engine.ts",
-      "import": "./engine.ts"
+      "types": "./dist-types/engine.d.ts",
+      "import": "./dist/engine.js",
+      "default": "./dist/engine.js"
     },
     "./translation-structure": {
-      "types": "./translation-structure.ts",
-      "import": "./translation-structure.ts"
+      "types": "./dist-types/translation-structure.d.ts",
+      "import": "./dist/translation-structure.js",
+      "default": "./dist/translation-structure.js"
     },
     "./rich-text": {
-      "types": "./rich-text.ts",
-      "import": "./rich-text.ts"
+      "types": "./dist-types/rich-text.d.ts",
+      "import": "./dist/rich-text.js",
+      "default": "./dist/rich-text.js"
     },
     "./parsers/ways-parser": {
-      "types": "./parsers/ways-parser.ts",
-      "import": "./parsers/ways-parser.ts"
+      "types": "./dist-types/parsers/ways-parser.d.ts",
+      "import": "./dist/parsers/ways-parser.js",
+      "default": "./dist/parsers/ways-parser.js"
     },
     "./parsers/intl-runtime": {
-      "types": "./parsers/intl-runtime.ts",
-      "import": "./parsers/intl-runtime.ts"
+      "types": "./dist-types/parsers/intl-runtime.d.ts",
+      "import": "./dist/parsers/intl-runtime.js",
+      "default": "./dist/parsers/intl-runtime.js"
     }
   },
   "files": [
-    "*.ts",
-    "global.d.ts",
-    "parsers/**/*.ts"
+    "dist",
+    "dist-types",
+    "global.d.ts"
   ],
   "scripts": {
-    "build": "echo '18ways-core build: source-only package'",
+    "build": "bun run bun-build.ts",
     "ts:check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
