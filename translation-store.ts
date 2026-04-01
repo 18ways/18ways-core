@@ -248,6 +248,17 @@ export class TranslationStore {
     }
   };
 
+  waitForBlockingIdle = async (): Promise<void> => {
+    while (this.pendingByKey.size || this.inFlightByKey.size) {
+      if (this.pendingByKey.size) {
+        await this.flush();
+        continue;
+      }
+
+      await Promise.resolve();
+    }
+  };
+
   waitForIdleForKey = async (key: string): Promise<void> => {
     while (this.hasPendingRequestsForKey(key) || this.hasInFlightRequestsForKey(key)) {
       if (this.hasPendingRequestsForKey(key)) {
