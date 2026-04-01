@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchAcceptedLocales } from '../common';
+import { _reset18waysRequestStateForTests, fetchAcceptedLocales, init } from '../common';
 
 describe('fetchAcceptedLocales', () => {
   beforeEach(() => {
+    _reset18waysRequestStateForTests();
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -12,11 +13,12 @@ describe('fetchAcceptedLocales', () => {
   });
 
   it('passes origin header when an origin is provided', async () => {
-    await fetchAcceptedLocales('en-GB', {
-      forceRefresh: true,
+    init({
+      key: 'test-public-api-key',
       origin: 'https://18ways.com',
-      apiKey: 'test-public-api-key',
+      cacheTtlSeconds: 0,
     });
+    await fetchAcceptedLocales('en-GB');
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
@@ -32,12 +34,13 @@ describe('fetchAcceptedLocales', () => {
   });
 
   it('uses the provided api url instead of package env state', async () => {
-    await fetchAcceptedLocales('en-GB', {
-      forceRefresh: true,
+    init({
+      key: 'api-key-from-ways-props',
       apiUrl: 'https://preview.18ways.com/api',
       origin: 'https://18ways.com',
-      apiKey: 'api-key-from-ways-props',
+      cacheTtlSeconds: 0,
     });
+    await fetchAcceptedLocales('en-GB');
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
@@ -48,22 +51,23 @@ describe('fetchAcceptedLocales', () => {
     );
   });
 
-  it('uses a 1 minute ttl when decorating cached accepted-locale requests', async () => {
+  it('uses the configured global ttl when decorating cached accepted-locale requests', async () => {
     const requestInitDecorator = vi.fn(({ requestInit, cacheTtlSeconds }) => ({
       ...requestInit,
       frameworkCache: { ttl: cacheTtlSeconds },
     }));
 
-    await fetchAcceptedLocales('en-GB', {
+    init({
+      key: 'test-public-api-key',
       origin: 'https://18ways.com',
-      apiKey: 'test-public-api-key',
       _requestInitDecorator: requestInitDecorator,
     });
+    await fetchAcceptedLocales('en-GB');
 
     expect(requestInitDecorator).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'GET',
-        cacheTtlSeconds: 60,
+        cacheTtlSeconds: 600,
       })
     );
     expect(fetch).toHaveBeenCalledWith(
@@ -71,48 +75,46 @@ describe('fetchAcceptedLocales', () => {
       expect.objectContaining({
         method: 'GET',
         cache: 'force-cache',
-        frameworkCache: { ttl: 60 },
+        frameworkCache: { ttl: 600 },
       })
     );
   });
 
   it('does not keep an extra in-memory cache for repeated keyed requests', async () => {
-    await fetchAcceptedLocales('en-GB', {
+    init({
+      key: 'test-public-api-key',
       origin: 'https://18ways.com',
-      apiKey: 'test-public-api-key',
     });
-    await fetchAcceptedLocales('en-GB', {
-      origin: 'https://18ways.com',
-      apiKey: 'test-public-api-key',
-    });
+    await fetchAcceptedLocales('en-GB');
+    await fetchAcceptedLocales('en-GB');
 
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it('always prepends the base locale to the accepted-locale list', async () => {
-    const locales = await fetchAcceptedLocales('en-US', {
-      forceRefresh: true,
+    init({
+      key: 'test-public-api-key',
       origin: 'https://18ways.com',
-      apiKey: 'test-public-api-key',
+      cacheTtlSeconds: 0,
     });
+    const locales = await fetchAcceptedLocales('en-US');
 
     expect(locales).toEqual(['en-US', 'en-GB', 'ja-JP']);
   });
 
   it('falls back to the default locale without fetching when no api key is available', async () => {
-    const locales = await fetchAcceptedLocales('en-GB', {
-      origin: 'https://18ways.com',
-    });
+    const locales = await fetchAcceptedLocales('en-GB');
 
     expect(locales).toEqual(['en-GB']);
     expect(fetch).not.toHaveBeenCalled();
   });
 
   it('returns a synthetic Caesar locale for the demo token without fetching', async () => {
-    const locales = await fetchAcceptedLocales('en-US', {
+    init({
+      key: 'pk_dummy_demo_token',
       origin: 'https://18ways.com',
-      apiKey: 'pk_dummy_demo_token',
     });
+    const locales = await fetchAcceptedLocales('en-US');
 
     expect(locales).toEqual(['en-US', 'en-US-x-caesar']);
     expect(fetch).not.toHaveBeenCalled();

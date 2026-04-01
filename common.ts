@@ -175,20 +175,19 @@ const emitRuntimeNetworkEvent = (event: RuntimeNetworkEvent): void => {
   });
 };
 
-interface FetchXOptions {
+type FetchXQueryValue = string | number | boolean;
+
+interface FetchXOptions<T> {
   url: string;
   method: string;
-  payload?:
-    | { payload: InProgressTranslation[] }
-    | { payload: KnownTranslationEntry[] }
-    | { keys: string[]; targetLocale: string };
-  onError: (error: Error) => any;
+  payload?: { payload: InProgressTranslation[] } | Record<string, unknown>;
+  queryParams?: Record<string, FetchXQueryValue | FetchXQueryValue[] | null | undefined>;
+  onError: (error: Error) => T;
 }
 
 const DEFAULT_18WAYS_API_URL = 'https://internal.18ways.com/api';
 const DEFAULT_LOCALE = 'en-GB';
 const DEFAULT_ORIGIN = 'http://localhost:3000';
-const DEFAULT_ACCEPTED_LOCALES_CACHE_TTL_SECONDS = 60;
 const DEMO_API_KEY = 'pk_dummy_demo_token';
 const DEMO_LOCALE_SUFFIX = '-x-caesar';
 
@@ -221,15 +220,6 @@ const joinApiBaseAndPath = (base: string, path: string): string => {
 };
 
 export const isDemoApiKey = (candidate?: string): boolean => candidate === DEMO_API_KEY;
-
-const resolveApiKey = (explicitApiKey?: string): string | undefined => {
-  if (typeof explicitApiKey !== 'string') {
-    return undefined;
-  }
-
-  const trimmed = explicitApiKey.trim();
-  return trimmed ? trimmed : undefined;
-};
 
 const buildDemoLocale = (baseLocale?: string | null): string => {
   const canonicalBaseLocale = canonicalizeLocale(baseLocale || DEFAULT_LOCALE) || DEFAULT_LOCALE;
@@ -522,46 +512,19 @@ export const _composeRequestInitDecorators = (
     }, requestInit);
 };
 
-export const fetchAcceptedLocales = async (
-  fallbackLocale?: string,
-  options?: {
-    forceRefresh?: boolean;
-    origin?: string;
-    apiKey?: string;
-    apiUrl?: string;
-    fetcher?: Fetcher;
-    cacheTtlSeconds?: number;
-    /** @internal Adapter-only fetch init hook. */
-    _requestInitDecorator?: _RequestInitDecorator;
-  }
-): Promise<string[]> => {
+export const fetchAcceptedLocales = async (fallbackLocale?: string): Promise<string[]> => {
   const defaultLocale = canonicalizeLocale(fallbackLocale || DEFAULT_LOCALE);
-  const acceptedLocalesApiKey = resolveApiKey(options?.apiKey || apiKey);
-  const acceptedLocalesCacheTtlSeconds =
-    typeof options?.cacheTtlSeconds === 'number' &&
-    Number.isFinite(options.cacheTtlSeconds) &&
-    options.cacheTtlSeconds >= 0
-      ? Math.floor(options.cacheTtlSeconds)
-      : DEFAULT_ACCEPTED_LOCALES_CACHE_TTL_SECONDS;
 
-  if (!acceptedLocalesApiKey) {
+  if (!apiKey) {
     return [defaultLocale];
   }
 
-  if (isDemoApiKey(acceptedLocalesApiKey)) {
+  if (isDemoApiKey(apiKey)) {
     return ensureBaseLocaleAccepted(defaultLocale, [buildDemoLocale(defaultLocale)]);
   }
 
   try {
-    const data = await fetchConfig({
-      forceRefresh: options?.forceRefresh,
-      origin: options?.origin,
-      apiKey: acceptedLocalesApiKey,
-      apiUrl: options?.apiUrl,
-      fetcher: options?.fetcher,
-      cacheTtlSeconds: acceptedLocalesCacheTtlSeconds,
-      _requestInitDecorator: options?._requestInitDecorator,
-    });
+    const data = await fetchConfig();
     const fetchedLocales = parseLocalesFromApiResponse(data);
     const locales = ensureBaseLocaleAccepted(defaultLocale, fetchedLocales);
 
@@ -602,15 +565,25 @@ export const resetServerInMemoryTranslations = () => {
   }
 };
 
+/** @internal Test helper for resetting module-level request config state. */
+export const _reset18waysRequestStateForTests = (): void => {
+  apiKey = undefined;
+  configuredBaseLocale = undefined;
+  apiUrl = undefined;
+  customFetcher = undefined;
+  requestOrigin = undefined;
+  customRequestInitDecorator = undefined;
+  cacheTtlSeconds = DEFAULT_CACHE_TTL_SECONDS;
+};
+
 export const inMemoryErrorCache: { [key: string]: any } = {};
 
 export const init = (keyOrOptions: string | InitOptions, rawOptions?: InitOptions): void => {
   const options =
     typeof keyOrOptions === 'string' ? { key: keyOrOptions, ...(rawOptions || {}) } : keyOrOptions;
-  const resolvedApiKey = resolveApiKey(options.key);
 
-  if (resolvedApiKey) {
-    apiKey = resolvedApiKey;
+  if (typeof options.key === 'string' && options.key.trim()) {
+    apiKey = options.key.trim();
   } else {
     throw new Error('Cannot init without an API key');
   }
@@ -632,22 +605,48 @@ export const init = (keyOrOptions: string | InitOptions, rawOptions?: InitOption
   }
 };
 
-const fetchX = async <T>({ url, method, payload, onError }: FetchXOptions): Promise<T> => {
+const fetchX = async <T>({
+  url,
+  method,
+  payload,
+  queryParams,
+  onError,
+}: FetchXOptions<T>): Promise<T> => {
   if (!apiKey) {
     throw new Error('API key is not set');
   }
 
   try {
-    const requestUrl = joinApiBaseAndPath(resolveApiBase(apiUrl), url);
+    const requestUrl = new URL(joinApiBaseAndPath(resolveApiBase(apiUrl), url));
     const fetchFn = customFetcher || fetch;
+    const resolvedOrigin = typeof window === 'undefined' && requestOrigin ? requestOrigin : null;
+
+    Object.entries(queryParams || {}).forEach(([key, value]) => {
+      if (value == null) {
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach((entry) => {
+          requestUrl.searchParams.append(key, String(entry));
+        });
+        return;
+      }
+
+      requestUrl.searchParams.set(key, String(value));
+    });
+
     const requestHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
       'x-api-key': apiKey,
     };
 
+    if (payload) {
+      requestHeaders['Content-Type'] = 'application/json';
+    }
+
     // Server-side requests do not automatically send browser Origin.
-    if (typeof window === 'undefined' && requestOrigin) {
-      requestHeaders.origin = requestOrigin;
+    if (resolvedOrigin) {
+      requestHeaders.origin = resolvedOrigin;
     }
 
     const requestInit: _RequestInitLike = {
@@ -662,24 +661,25 @@ const fetchX = async <T>({ url, method, payload, onError }: FetchXOptions): Prom
 
     const finalRequestInit = customRequestInitDecorator
       ? customRequestInitDecorator({
-          url: requestUrl,
+          url: requestUrl.toString(),
           method,
           requestInit,
           cacheTtlSeconds,
         })
       : requestInit;
 
-    const result = await fetchFn(requestUrl, finalRequestInit as RequestInit);
+    const result = await fetchFn(requestUrl.toString(), finalRequestInit as RequestInit);
 
     if (!result.ok) {
-      // Try to parse error response, but don't fail if it's not JSON
       let errorBody;
       try {
         errorBody = await result.text();
       } catch {
         errorBody = '';
       }
-      throw new Error(`Failed to fetch: ${requestUrl} ${result.status} ${result.statusText}`);
+      throw new Error(
+        `Failed to fetch: ${requestUrl.toString()} ${result.status} ${result.statusText} ${errorBody.slice(0, 200)}`
+      );
     }
 
     try {
@@ -697,7 +697,7 @@ const fetchX = async <T>({ url, method, payload, onError }: FetchXOptions): Prom
 export const fetchTranslations = async (
   toTranslate: InProgressTranslation[]
 ): Promise<FetchTranslationsResult> => {
-  if (isDemoApiKey(resolveApiKey(apiKey))) {
+  if (isDemoApiKey(apiKey)) {
     const result = createDemoTranslationResult(toTranslate);
     emitRuntimeNetworkEvent({ type: 'translate', request: toTranslate, result });
     return result;
@@ -727,7 +727,7 @@ export const fetchTranslations = async (
 export const fetchKnown = async (
   entries: KnownTranslationEntry[]
 ): Promise<FetchKnownResult | undefined> => {
-  if (isDemoApiKey(resolveApiKey(apiKey))) {
+  if (isDemoApiKey(apiKey)) {
     const result = {
       data: entries,
       errors: [],
@@ -736,10 +736,31 @@ export const fetchKnown = async (
     return result;
   }
 
+  const sortedEntries = [...entries].sort((a, b) =>
+    JSON.stringify([
+      a.targetLocale,
+      a.key,
+      a.textHash,
+      a.contextFingerprint || '',
+    ]).localeCompare(
+      JSON.stringify([
+        b.targetLocale,
+        b.key,
+        b.textHash,
+        b.contextFingerprint || '',
+      ])
+    )
+  );
+
   const result = await fetchX<FetchKnownResult | undefined>({
     url: '/known',
-    method: 'POST',
-    payload: { payload: entries },
+    method: 'GET',
+    queryParams: {
+      targetLocale: sortedEntries.map((entry) => entry.targetLocale),
+      key: sortedEntries.map((entry) => entry.key),
+      textHash: sortedEntries.map((entry) => entry.textHash),
+      contextFingerprint: sortedEntries.map((entry) => entry.contextFingerprint || ''),
+    },
     onError: (e) => {
       console.error(e);
       return undefined;
@@ -750,7 +771,7 @@ export const fetchKnown = async (
 };
 
 export const fetchSeed = async (keys: string[], targetLocale: string): Promise<FetchSeedResult> => {
-  if (isDemoApiKey(resolveApiKey(apiKey))) {
+  if (isDemoApiKey(apiKey)) {
     const result = {
       data: {},
       errors: [],
@@ -765,8 +786,11 @@ export const fetchSeed = async (keys: string[], targetLocale: string): Promise<F
 
   const result = await fetchX<FetchSeedResult>({
     url: '/seed',
-    method: 'POST',
-    payload: { keys, targetLocale },
+    method: 'GET',
+    queryParams: {
+      targetLocale,
+      key: [...keys].sort(),
+    },
     onError: (e) => {
       console.error(e);
       return {
@@ -786,80 +810,24 @@ export interface Language {
   flag?: string;
 }
 
-const fetchConfigRaw = async (options?: {
-  forceRefresh?: boolean;
-  origin?: string;
-  apiKey?: string;
-  apiUrl?: string;
-  fetcher?: Fetcher;
-  cacheTtlSeconds?: number;
-  _requestInitDecorator?: _RequestInitDecorator;
-}): Promise<FetchConfigResult> => {
-  const configApiKey = resolveApiKey(options?.apiKey || apiKey);
-  if (!configApiKey) {
+const fetchConfigRaw = async (): Promise<FetchConfigResult> => {
+  if (!apiKey) {
     throw new Error('API key is not set');
   }
 
-  if (isDemoApiKey(configApiKey)) {
+  if (isDemoApiKey(apiKey)) {
     return createDemoConfig(configuredBaseLocale || DEFAULT_LOCALE);
   }
 
-  const resolvedRequestOrigin = options?.origin
-    ? normalizeOrigin(options.origin)
-    : typeof window === 'undefined' && requestOrigin
-      ? requestOrigin
-      : null;
-  const resolvedCacheTtlSeconds =
-    typeof options?.cacheTtlSeconds === 'number' &&
-    Number.isFinite(options.cacheTtlSeconds) &&
-    options.cacheTtlSeconds >= 0
-      ? Math.floor(options.cacheTtlSeconds)
-      : cacheTtlSeconds;
-  const endpoint = joinApiBaseAndPath(resolveApiBase(options?.apiUrl || apiUrl), '/api/config');
-  const headers: Record<string, string> = {
-    'x-api-key': configApiKey,
-  };
-
-  if (resolvedRequestOrigin) {
-    headers.origin = resolvedRequestOrigin;
-  }
-
-  const requestInit: _RequestInitLike =
-    options?.forceRefresh || resolvedCacheTtlSeconds === 0
-      ? {
-          method: 'GET',
-          headers,
-          cache: 'no-store',
-        }
-      : {
-          method: 'GET',
-          headers,
-          cache: 'force-cache',
-        };
-
-  const decorator = options?._requestInitDecorator || customRequestInitDecorator;
-  const finalRequestInit = decorator
-    ? decorator({
-        url: endpoint,
-        method: 'GET',
-        requestInit,
-        cacheTtlSeconds: resolvedCacheTtlSeconds,
-      })
-    : requestInit;
-
-  const response = await (options?.fetcher || customFetcher || fetch)(
-    endpoint,
-    finalRequestInit as RequestInit
-  );
-
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => '');
-    throw new Error(
-      `Failed to fetch config: status=${response.status} origin=${resolvedRequestOrigin || 'none'} endpoint=${endpoint} body=${errorBody.slice(0, 200)}`
-    );
-  }
-
-  const data = await response.json();
+  const data = await fetchX<FetchConfigResult>({
+    url: '/config',
+    method: 'GET',
+    onError: (error) => {
+      throw new Error(
+        `Failed to fetch config: origin=${requestOrigin || 'none'} endpoint=/api/config cause=${error.message}`
+      );
+    },
+  });
 
   return {
     languages: Array.isArray(data?.languages) ? data.languages : [],
@@ -868,17 +836,9 @@ const fetchConfigRaw = async (options?: {
   };
 };
 
-export const fetchConfig = async (options?: {
-  forceRefresh?: boolean;
-  origin?: string;
-  apiKey?: string;
-  apiUrl?: string;
-  fetcher?: Fetcher;
-  cacheTtlSeconds?: number;
-  _requestInitDecorator?: _RequestInitDecorator;
-}): Promise<FetchConfigResult> => {
+export const fetchConfig = async (): Promise<FetchConfigResult> => {
   try {
-    return await fetchConfigRaw(options);
+    return await fetchConfigRaw();
   } catch (e) {
     console.error('Failed to fetch config:', e);
     return {
