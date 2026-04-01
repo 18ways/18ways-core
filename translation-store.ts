@@ -1,5 +1,11 @@
 import set from 'set-value';
-import type { FetchTranslationsResult, InProgressTranslation, Translations } from './common';
+import type {
+  FetchKnownResult,
+  FetchTranslationsResult,
+  InProgressTranslation,
+  KnownTranslationEntry,
+  Translations,
+} from './common';
 import { normalizeTranslationContextFingerprint } from './context-fingerprint';
 import { deepMerge, getPath } from './object-utils';
 
@@ -18,6 +24,8 @@ export interface TranslationDataSnapshot {
 type FetchTranslationsFn = (
   toTranslate: InProgressTranslation[]
 ) => Promise<FetchTranslationsResult | undefined>;
+
+type FetchKnownFn = (entries: KnownTranslationEntry[]) => Promise<FetchKnownResult | undefined>;
 
 const ERROR_CACHE_TTL_MS = 1000 * 60;
 
@@ -53,6 +61,7 @@ const entryMatchesContextKey = (entryId: string, contextKey: string): boolean =>
 export class TranslationStore {
   private translations: Translations;
   private fetchTranslations: FetchTranslationsFn;
+  private fetchKnown?: FetchKnownFn;
   private listeners = new Set<() => void>();
   private translationListeners = new Set<() => void>();
   private pending = new Map<string, InProgressTranslation>();
@@ -67,9 +76,14 @@ export class TranslationStore {
   private snapshot: TranslationStoreSnapshot;
   private translationSnapshot: TranslationDataSnapshot;
 
-  constructor(options: { translations: Translations; fetchTranslations: FetchTranslationsFn }) {
+  constructor(options: {
+    translations: Translations;
+    fetchTranslations: FetchTranslationsFn;
+    fetchKnown?: FetchKnownFn;
+  }) {
     this.translations = options.translations;
     this.fetchTranslations = options.fetchTranslations;
+    this.fetchKnown = options.fetchKnown;
     this.translationSnapshot = {
       version: this.version,
       translations: this.translations,
@@ -320,62 +334,107 @@ export class TranslationStore {
       this.emit(false);
 
       try {
-        const result = await this.fetchTranslations(batch);
-        if (!result || !Array.isArray(result.data) || !Array.isArray(result.errors)) {
-          throw new Error('Invalid translation response');
+        const captureEntries = batch.filter((entry) => isCaptureEntry(entry));
+        const regularEntries = batch.filter((entry) => !isCaptureEntry(entry));
+        const knownCaptureEntryIds = new Set<string>();
+        const unknownCaptureEntries: InProgressTranslation[] = [];
+
+        if (captureEntries.length && this.fetchKnown) {
+          const knownResult = await this.fetchKnown(
+            captureEntries.map((entry) => ({
+              targetLocale: entry.targetLocale,
+              key: entry.key,
+              textHash: entry.textHash,
+              contextFingerprint: entry.contextFingerprint ?? null,
+            }))
+          );
+
+          if (knownResult && Array.isArray(knownResult.data)) {
+            knownResult.data.forEach((entry) => {
+              knownCaptureEntryIds.add(
+                translationEntryId({
+                  targetLocale: entry.targetLocale,
+                  key: entry.key,
+                  textHash: entry.textHash,
+                  contextFingerprint: entry.contextFingerprint ?? undefined,
+                })
+              );
+            });
+
+            captureEntries.forEach((entry) => {
+              const id = translationEntryId(entry);
+              if (knownCaptureEntryIds.has(id)) {
+                this.completed.add(id);
+                return;
+              }
+              unknownCaptureEntries.push(entry);
+            });
+          } else {
+            unknownCaptureEntries.push(...captureEntries);
+          }
+        } else {
+          unknownCaptureEntries.push(...captureEntries);
         }
 
-        const successfulRequestIds = new Set<string>();
-        const successfulRequestTriples = new Set<string>();
+        const fetchBatch = [...regularEntries, ...unknownCaptureEntries];
+        if (fetchBatch.length) {
+          const result = await this.fetchTranslations(fetchBatch);
+          if (!result || !Array.isArray(result.data) || !Array.isArray(result.errors)) {
+            throw new Error('Invalid translation response');
+          }
 
-        result.data.forEach(({ locale, key, textHash, translation, contextFingerprint }) => {
-          set(this.translations, [locale, key, textHash], translation);
-          successfulRequestTriples.add(
-            translationEntryTriple({
-              targetLocale: locale,
-              key,
-              textHash,
-            })
-          );
-          successfulRequestIds.add(
-            translationEntryId({
+          const successfulRequestIds = new Set<string>();
+          const successfulRequestTriples = new Set<string>();
+
+          result.data.forEach(({ locale, key, textHash, translation, contextFingerprint }) => {
+            set(this.translations, [locale, key, textHash], translation);
+            successfulRequestTriples.add(
+              translationEntryTriple({
+                targetLocale: locale,
+                key,
+                textHash,
+              })
+            );
+            successfulRequestIds.add(
+              translationEntryId({
+                targetLocale: locale,
+                key,
+                textHash,
+                contextFingerprint: contextFingerprint ?? undefined,
+              })
+            );
+          });
+
+          result.errors.forEach(({ locale, key, textHash, contextFingerprint }) => {
+            const id = translationEntryId({
               targetLocale: locale,
               key,
               textHash,
               contextFingerprint: contextFingerprint ?? undefined,
-            })
-          );
-        });
-
-        result.errors.forEach(({ locale, key, textHash, contextFingerprint }) => {
-          const id = translationEntryId({
-            targetLocale: locale,
-            key,
-            textHash,
-            contextFingerprint: contextFingerprint ?? undefined,
+            });
+            this.errorCache.set(id, Date.now() + ERROR_CACHE_TTL_MS);
           });
-          this.errorCache.set(id, Date.now() + ERROR_CACHE_TTL_MS);
-        });
 
-        // If the backend does not acknowledge a requested entry at all, treat it
-        // as a temporary error to avoid infinite retry loops.
-        batch.forEach((entry) => {
-          const id = translationEntryId(entry);
-          const triple = translationEntryTriple(entry);
-          if (successfulRequestIds.has(id) || successfulRequestTriples.has(triple)) {
-            this.completed.add(id);
-            return;
+          // If the backend does not acknowledge a requested entry at all, treat it
+          // as a temporary error to avoid infinite retry loops.
+          fetchBatch.forEach((entry) => {
+            const id = translationEntryId(entry);
+            const triple = translationEntryTriple(entry);
+            if (successfulRequestIds.has(id) || successfulRequestTriples.has(triple)) {
+              this.completed.add(id);
+              return;
+            }
+
+            this.errorCache.set(id, Date.now() + ERROR_CACHE_TTL_MS);
+          });
+
+          if (result.errors.length) {
+            console.warn('Some translations failed');
           }
 
-          this.errorCache.set(id, Date.now() + ERROR_CACHE_TTL_MS);
-        });
-
-        if (result.errors.length) {
-          console.warn('Some translations failed');
-        }
-
-        if (result.data.length) {
-          this.emit(true);
+          if (result.data.length) {
+            this.emit(true);
+          }
         }
       } catch (error) {
         console.error('Unexpected error while fetching translations:', error);

@@ -6,12 +6,15 @@ import { formatWaysParser } from '../parsers/ways-parser';
 
 describe('WaysEngine', () => {
   it('returns source text for base locale while still sending a capture request', async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ data: [], errors: [] }), {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input);
+      const body = url.endsWith('/known') ? { data: [], errors: [] } : { data: [], errors: [] };
+
+      return new Response(JSON.stringify(body), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-      })
-    );
+      });
+    });
 
     const engine = create18waysEngine({
       apiKey: 'test-key',
@@ -25,7 +28,9 @@ describe('WaysEngine', () => {
     const value = await engine.t('Hello world');
     expect(value).toBe('Hello world');
     await engine.getStore().waitForIdle();
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain('/known');
+    expect(String(fetcher.mock.calls[1]?.[0])).toContain('/translate');
   });
 
   it('fetches, decrypts, and caches translated values by locale', async () => {

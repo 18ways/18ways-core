@@ -30,6 +30,10 @@ describe('TranslationStore', () => {
   });
 
   it('captures same-locale observations once per context fingerprint without entering loading state', async () => {
+    const fetchKnown = vi.fn(async () => ({
+      data: [],
+      errors: [],
+    }));
     const fetchTranslations = vi.fn(async (entries) => ({
       data: entries.map((entry) => ({
         locale: entry.targetLocale,
@@ -49,6 +53,7 @@ describe('TranslationStore', () => {
           },
         },
       },
+      fetchKnown,
       fetchTranslations,
     });
 
@@ -66,6 +71,7 @@ describe('TranslationStore', () => {
 
     await store.waitForIdle();
 
+    expect(fetchKnown).toHaveBeenCalledTimes(1);
     expect(fetchTranslations).toHaveBeenCalledTimes(1);
     expect(
       store.hasCompletedEntry({
@@ -98,7 +104,76 @@ describe('TranslationStore', () => {
 
     await store.waitForIdle();
 
+    expect(fetchKnown).toHaveBeenCalledTimes(2);
     expect(fetchTranslations).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips translate for same-locale capture entries already known by context key and fingerprint', async () => {
+    const fetchKnown = vi.fn(async () => ({
+      data: [
+        {
+          targetLocale: 'es-ES',
+          key: 'cta',
+          textHash: 'hash_1',
+          contextFingerprint: 'fingerprint-a',
+        },
+      ],
+      errors: [],
+    }));
+    const fetchTranslations = vi.fn(async (entries) => ({
+      data: entries.map((entry) => ({
+        locale: entry.targetLocale,
+        key: entry.key,
+        textHash: entry.textHash,
+        contextFingerprint: entry.contextFingerprint ?? null,
+        translationId: 'group-1',
+        translation: 'Hola',
+      })),
+      errors: [],
+    }));
+    const store = new TranslationStore({
+      translations: {},
+      fetchKnown,
+      fetchTranslations,
+    });
+
+    store.enqueue({
+      baseLocale: 'es-ES',
+      targetLocale: 'es-ES',
+      key: 'cta',
+      textHash: 'hash_1',
+      text: 'Hello',
+      contextFingerprint: 'fingerprint-a',
+    });
+    store.enqueue({
+      baseLocale: 'es-ES',
+      targetLocale: 'es-ES',
+      key: 'cta',
+      textHash: 'hash_2',
+      text: 'Goodbye',
+      contextFingerprint: 'fingerprint-b',
+    });
+
+    await store.waitForIdle();
+
+    expect(fetchKnown).toHaveBeenCalledTimes(1);
+    expect(fetchTranslations).toHaveBeenCalledTimes(1);
+    expect(fetchTranslations).toHaveBeenCalledWith([
+      expect.objectContaining({
+        targetLocale: 'es-ES',
+        key: 'cta',
+        textHash: 'hash_2',
+        contextFingerprint: 'fingerprint-b',
+      }),
+    ]);
+    expect(
+      store.hasCompletedEntry({
+        targetLocale: 'es-ES',
+        key: 'cta',
+        textHash: 'hash_1',
+        contextFingerprint: 'fingerprint-a',
+      })
+    ).toBe(true);
   });
 
   it('clears completed capture entries when a context is garbage-collected', async () => {

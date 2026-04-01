@@ -2,6 +2,7 @@ import {
   buildTranslationFallbackValue,
   DEFAULT_TRANSLATION_FALLBACK_CONFIG,
   fetchConfig,
+  fetchKnown,
   fetchTranslations,
   generateHashId,
   init,
@@ -86,6 +87,7 @@ export class WaysEngine {
     this.contextKey = normalizeContextKey(options.context);
     this.store = new TranslationStore({
       translations: (options.initialTranslations || {}) as Translations,
+      fetchKnown,
       fetchTranslations,
     });
 

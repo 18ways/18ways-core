@@ -1,3 +1,5 @@
+/// <reference path="./global.d.ts" />
+
 import { encryptTranslationValue, generateHashIdV2 } from './crypto';
 import { canonicalizeLocale } from './i18n-shared';
 import {
@@ -81,6 +83,13 @@ export interface InProgressTranslation {
   contextMetadata?: TranslationContextValue;
 }
 
+export interface KnownTranslationEntry {
+  key: string;
+  textHash: string;
+  targetLocale: string;
+  contextFingerprint?: string | null;
+}
+
 export interface FetchTranslationsResult {
   data: Array<{
     locale: string;
@@ -98,6 +107,16 @@ export interface FetchTranslationsResult {
     contextFingerprint?: string | null;
   }>;
   snapshotRequestTranslationIds?: string[];
+}
+
+export interface FetchKnownResult {
+  data: KnownTranslationEntry[];
+  errors: Array<{
+    targetLocale: string;
+    key: string;
+    textHash: string;
+    contextFingerprint?: string | null;
+  }>;
 }
 
 export interface FetchSeedResult {
@@ -118,6 +137,11 @@ export interface FetchConfigResult {
 }
 
 export type RuntimeNetworkEvent =
+  | {
+      type: 'known';
+      request: KnownTranslationEntry[];
+      result: FetchKnownResult | undefined;
+    }
   | {
       type: 'seed';
       targetLocale: string;
@@ -154,7 +178,10 @@ const emitRuntimeNetworkEvent = (event: RuntimeNetworkEvent): void => {
 interface FetchXOptions {
   url: string;
   method: string;
-  payload?: { payload: InProgressTranslation[] } | { keys: string[]; targetLocale: string };
+  payload?:
+    | { payload: InProgressTranslation[] }
+    | { payload: KnownTranslationEntry[] }
+    | { keys: string[]; targetLocale: string };
   onError: (error: Error) => any;
 }
 
@@ -694,6 +721,31 @@ export const fetchTranslations = async (
     },
   });
   emitRuntimeNetworkEvent({ type: 'translate', request: toTranslate, result });
+  return result;
+};
+
+export const fetchKnown = async (
+  entries: KnownTranslationEntry[]
+): Promise<FetchKnownResult | undefined> => {
+  if (isDemoApiKey(resolveApiKey(apiKey))) {
+    const result = {
+      data: entries,
+      errors: [],
+    };
+    emitRuntimeNetworkEvent({ type: 'known', request: entries, result });
+    return result;
+  }
+
+  const result = await fetchX<FetchKnownResult | undefined>({
+    url: '/known',
+    method: 'POST',
+    payload: { payload: entries },
+    onError: (e) => {
+      console.error(e);
+      return undefined;
+    },
+  });
+  emitRuntimeNetworkEvent({ type: 'known', request: entries, result });
   return result;
 };
 
