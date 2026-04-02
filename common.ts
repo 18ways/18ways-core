@@ -737,18 +737,8 @@ export const fetchKnown = async (
   }
 
   const sortedEntries = [...entries].sort((a, b) =>
-    JSON.stringify([
-      a.targetLocale,
-      a.key,
-      a.textHash,
-      a.contextFingerprint || '',
-    ]).localeCompare(
-      JSON.stringify([
-        b.targetLocale,
-        b.key,
-        b.textHash,
-        b.contextFingerprint || '',
-      ])
+    JSON.stringify([a.targetLocale, a.key, a.textHash, a.contextFingerprint || '']).localeCompare(
+      JSON.stringify([b.targetLocale, b.key, b.textHash, b.contextFingerprint || ''])
     )
   );
 
