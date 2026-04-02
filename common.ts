@@ -29,9 +29,12 @@ interface InitOptions {
   apiUrl?: string;
   fetcher?: Fetcher;
   cacheTtlSeconds?: number;
-  origin?: string;
   /** @internal Adapter-only fetch init hook. */
   _requestInitDecorator?: _RequestInitDecorator;
+}
+
+export interface FetchRequestOptions {
+  origin?: string;
 }
 
 export type SnapshotTranslationEntry = {
@@ -182,6 +185,7 @@ interface FetchXOptions<T> {
   method: string;
   payload?: { payload: InProgressTranslation[] } | Record<string, unknown>;
   queryParams?: Record<string, FetchXQueryValue | FetchXQueryValue[] | null | undefined>;
+  requestOptions?: FetchRequestOptions;
   onError: (error: Error) => T;
 }
 
@@ -195,7 +199,6 @@ let apiKey: string | undefined;
 let configuredBaseLocale: string | undefined;
 let apiUrl: string | undefined;
 let customFetcher: Fetcher | undefined;
-let requestOrigin: string | undefined;
 let customRequestInitDecorator: _RequestInitDecorator | undefined;
 let serverCache: Translations | null = null;
 const DEFAULT_CACHE_TTL_SECONDS = 10 * 60;
@@ -512,7 +515,10 @@ export const _composeRequestInitDecorators = (
     }, requestInit);
 };
 
-export const fetchAcceptedLocales = async (fallbackLocale?: string): Promise<string[]> => {
+export const fetchAcceptedLocales = async (
+  fallbackLocale?: string,
+  options?: FetchRequestOptions
+): Promise<string[]> => {
   const defaultLocale = canonicalizeLocale(fallbackLocale || DEFAULT_LOCALE);
 
   if (!apiKey) {
@@ -524,7 +530,7 @@ export const fetchAcceptedLocales = async (fallbackLocale?: string): Promise<str
   }
 
   try {
-    const data = await fetchConfig();
+    const data = await fetchConfig(options);
     const fetchedLocales = parseLocalesFromApiResponse(data);
     const locales = ensureBaseLocaleAccepted(defaultLocale, fetchedLocales);
 
@@ -571,7 +577,6 @@ export const _reset18waysRequestStateForTests = (): void => {
   configuredBaseLocale = undefined;
   apiUrl = undefined;
   customFetcher = undefined;
-  requestOrigin = undefined;
   customRequestInitDecorator = undefined;
   cacheTtlSeconds = DEFAULT_CACHE_TTL_SECONDS;
 };
@@ -591,7 +596,6 @@ export const init = (keyOrOptions: string | InitOptions, rawOptions?: InitOption
   configuredBaseLocale = canonicalizeLocale(options.baseLocale || '') || undefined;
   apiUrl = options.apiUrl;
   customFetcher = options.fetcher;
-  requestOrigin = options.origin;
   customRequestInitDecorator = options._requestInitDecorator;
 
   if (
@@ -610,6 +614,7 @@ const fetchX = async <T>({
   method,
   payload,
   queryParams,
+  requestOptions,
   onError,
 }: FetchXOptions<T>): Promise<T> => {
   if (!apiKey) {
@@ -619,7 +624,10 @@ const fetchX = async <T>({
   try {
     const requestUrl = new URL(joinApiBaseAndPath(resolveApiBase(apiUrl), url));
     const fetchFn = customFetcher || fetch;
-    const resolvedOrigin = typeof window === 'undefined' && requestOrigin ? requestOrigin : null;
+    const resolvedOrigin =
+      typeof window === 'undefined' && requestOptions?.origin
+        ? normalizeOrigin(requestOptions.origin)
+        : null;
 
     Object.entries(queryParams || {}).forEach(([key, value]) => {
       if (value == null) {
@@ -695,7 +703,8 @@ const fetchX = async <T>({
 };
 
 export const fetchTranslations = async (
-  toTranslate: InProgressTranslation[]
+  toTranslate: InProgressTranslation[],
+  options?: FetchRequestOptions
 ): Promise<FetchTranslationsResult> => {
   if (isDemoApiKey(apiKey)) {
     const result = createDemoTranslationResult(toTranslate);
@@ -707,6 +716,7 @@ export const fetchTranslations = async (
     url: '/translate',
     method: 'POST',
     payload: { payload: toTranslate },
+    requestOptions: options,
     onError: (e) => {
       console.error(e);
       return {
@@ -725,7 +735,8 @@ export const fetchTranslations = async (
 };
 
 export const fetchKnown = async (
-  entries: KnownTranslationEntry[]
+  entries: KnownTranslationEntry[],
+  options?: FetchRequestOptions
 ): Promise<FetchKnownResult | undefined> => {
   if (isDemoApiKey(apiKey)) {
     const result = {
@@ -745,6 +756,7 @@ export const fetchKnown = async (
   const result = await fetchX<FetchKnownResult | undefined>({
     url: '/known',
     method: 'GET',
+    requestOptions: options,
     queryParams: {
       targetLocale: sortedEntries.map((entry) => entry.targetLocale),
       key: sortedEntries.map((entry) => entry.key),
@@ -760,7 +772,11 @@ export const fetchKnown = async (
   return result;
 };
 
-export const fetchSeed = async (keys: string[], targetLocale: string): Promise<FetchSeedResult> => {
+export const fetchSeed = async (
+  keys: string[],
+  targetLocale: string,
+  options?: FetchRequestOptions
+): Promise<FetchSeedResult> => {
   if (isDemoApiKey(apiKey)) {
     const result = {
       data: {},
@@ -777,6 +793,7 @@ export const fetchSeed = async (keys: string[], targetLocale: string): Promise<F
   const result = await fetchX<FetchSeedResult>({
     url: '/seed',
     method: 'GET',
+    requestOptions: options,
     queryParams: {
       targetLocale,
       key: [...keys].sort(),
@@ -800,7 +817,7 @@ export interface Language {
   flag?: string;
 }
 
-const fetchConfigRaw = async (): Promise<FetchConfigResult> => {
+const fetchConfigRaw = async (options?: FetchRequestOptions): Promise<FetchConfigResult> => {
   if (!apiKey) {
     throw new Error('API key is not set');
   }
@@ -812,9 +829,10 @@ const fetchConfigRaw = async (): Promise<FetchConfigResult> => {
   const data = await fetchX<FetchConfigResult>({
     url: '/config',
     method: 'GET',
+    requestOptions: options,
     onError: (error) => {
       throw new Error(
-        `Failed to fetch config: origin=${requestOrigin || 'none'} endpoint=/api/config cause=${error.message}`
+        `Failed to fetch config: origin=${options?.origin || 'none'} endpoint=/api/config cause=${error.message}`
       );
     },
   });
@@ -826,9 +844,9 @@ const fetchConfigRaw = async (): Promise<FetchConfigResult> => {
   };
 };
 
-export const fetchConfig = async (): Promise<FetchConfigResult> => {
+export const fetchConfig = async (options?: FetchRequestOptions): Promise<FetchConfigResult> => {
   try {
-    return await fetchConfigRaw();
+    return await fetchConfigRaw(options);
   } catch (e) {
     console.error('Failed to fetch config:', e);
     return {

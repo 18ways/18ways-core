@@ -146,10 +146,9 @@ describe('common - cache ttl', () => {
     init({
       key: 'test-api-key',
       fetcher: fetchMock as typeof fetch,
-      origin: 'https://18ways.com',
     });
 
-    await fetchSeed(['key-1'], 'es-ES');
+    await fetchSeed(['key-1'], 'es-ES', { origin: 'https://18ways.com' });
 
     const call = fetchMock.mock.calls[0];
     expect(call[1].headers.origin).toBe('https://18ways.com');

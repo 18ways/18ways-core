@@ -15,10 +15,9 @@ describe('fetchAcceptedLocales', () => {
   it('passes origin header when an origin is provided', async () => {
     init({
       key: 'test-public-api-key',
-      origin: 'https://18ways.com',
       cacheTtlSeconds: 0,
     });
-    await fetchAcceptedLocales('en-GB');
+    await fetchAcceptedLocales('en-GB', { origin: 'https://18ways.com' });
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
@@ -37,10 +36,9 @@ describe('fetchAcceptedLocales', () => {
     init({
       key: 'api-key-from-ways-props',
       apiUrl: 'https://preview.18ways.com/api',
-      origin: 'https://18ways.com',
       cacheTtlSeconds: 0,
     });
-    await fetchAcceptedLocales('en-GB');
+    await fetchAcceptedLocales('en-GB', { origin: 'https://18ways.com' });
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
@@ -59,10 +57,9 @@ describe('fetchAcceptedLocales', () => {
 
     init({
       key: 'test-public-api-key',
-      origin: 'https://18ways.com',
       _requestInitDecorator: requestInitDecorator,
     });
-    await fetchAcceptedLocales('en-GB');
+    await fetchAcceptedLocales('en-GB', { origin: 'https://18ways.com' });
 
     expect(requestInitDecorator).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -83,10 +80,9 @@ describe('fetchAcceptedLocales', () => {
   it('does not keep an extra in-memory cache for repeated keyed requests', async () => {
     init({
       key: 'test-public-api-key',
-      origin: 'https://18ways.com',
     });
-    await fetchAcceptedLocales('en-GB');
-    await fetchAcceptedLocales('en-GB');
+    await fetchAcceptedLocales('en-GB', { origin: 'https://18ways.com' });
+    await fetchAcceptedLocales('en-GB', { origin: 'https://18ways.com' });
 
     expect(fetch).toHaveBeenCalledTimes(2);
   });
@@ -94,10 +90,9 @@ describe('fetchAcceptedLocales', () => {
   it('always prepends the base locale to the accepted-locale list', async () => {
     init({
       key: 'test-public-api-key',
-      origin: 'https://18ways.com',
       cacheTtlSeconds: 0,
     });
-    const locales = await fetchAcceptedLocales('en-US');
+    const locales = await fetchAcceptedLocales('en-US', { origin: 'https://18ways.com' });
 
     expect(locales).toEqual(['en-US', 'en-GB', 'ja-JP']);
   });
@@ -112,7 +107,6 @@ describe('fetchAcceptedLocales', () => {
   it('returns a synthetic Caesar locale for the demo token without fetching', async () => {
     init({
       key: 'pk_dummy_demo_token',
-      origin: 'https://18ways.com',
     });
     const locales = await fetchAcceptedLocales('en-US');
 

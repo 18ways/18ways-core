@@ -79,16 +79,18 @@ export class WaysEngine {
   private baseLocale: string;
   private targetLocale: string;
   private contextKey: string;
+  private requestOrigin?: string;
   private translationFallbackConfigPromise: Promise<TranslationFallbackConfig> | null = null;
 
   constructor(options: WaysEngineOptions) {
     this.baseLocale = canonicalizeLocale(options.baseLocale || DEFAULT_BASE_LOCALE);
     this.targetLocale = canonicalizeLocale(options.locale || this.baseLocale);
     this.contextKey = normalizeContextKey(options.context);
+    this.requestOrigin = options.origin;
     this.store = new TranslationStore({
       translations: (options.initialTranslations || {}) as Translations,
-      fetchKnown,
-      fetchTranslations,
+      fetchKnown: (entries) => fetchKnown(entries, { origin: this.requestOrigin }),
+      fetchTranslations: (entries) => fetchTranslations(entries, { origin: this.requestOrigin }),
     });
 
     init({
@@ -97,7 +99,6 @@ export class WaysEngine {
       apiUrl: options.apiUrl,
       fetcher: options.fetcher,
       cacheTtlSeconds: options.cacheTtlSeconds,
-      origin: options.origin,
       _requestInitDecorator: options._requestInitDecorator,
     });
   }
@@ -112,7 +113,7 @@ export class WaysEngine {
 
   private getTranslationFallbackConfig = async (): Promise<TranslationFallbackConfig> => {
     if (!this.translationFallbackConfigPromise) {
-      this.translationFallbackConfigPromise = fetchConfig()
+      this.translationFallbackConfigPromise = fetchConfig({ origin: this.requestOrigin })
         .then((config) => config.translationFallback)
         .catch(() => DEFAULT_TRANSLATION_FALLBACK_CONFIG);
     }

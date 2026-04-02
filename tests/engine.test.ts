@@ -76,6 +76,78 @@ describe('WaysEngine', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps request origins scoped to each engine instance', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = new URL(String(input));
+
+      if (url.pathname.endsWith('/known')) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                targetLocale: url.searchParams.get('targetLocale'),
+                key: url.searchParams.get('key'),
+                textHash: url.searchParams.get('textHash'),
+                contextFingerprint: null,
+              },
+            ],
+            errors: [],
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      return new Response(JSON.stringify({ data: [], errors: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    const firstEngine = create18waysEngine({
+      apiKey: 'test-key',
+      apiUrl: 'https://api.18ways.local',
+      baseLocale: 'en-US',
+      locale: 'en-US',
+      context: 'app',
+      fetcher,
+      origin: 'https://first.18ways.com',
+    });
+
+    const secondEngine = create18waysEngine({
+      apiKey: 'test-key',
+      apiUrl: 'https://api.18ways.local',
+      baseLocale: 'en-US',
+      locale: 'en-US',
+      context: 'app',
+      fetcher,
+      origin: 'https://second.18ways.com',
+    });
+
+    await firstEngine.t('Hello first');
+    await firstEngine.getStore().waitForIdle();
+    await secondEngine.t('Hello second');
+    await secondEngine.getStore().waitForIdle();
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          origin: 'https://first.18ways.com',
+        }),
+      })
+    );
+    expect(fetcher.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          origin: 'https://second.18ways.com',
+        }),
+      })
+    );
+  });
+
   it('formats runtime-only waysParser messages locally without calling translate', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ data: [], errors: [] }), {
