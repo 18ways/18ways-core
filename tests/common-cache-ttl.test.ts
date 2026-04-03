@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { decryptTranslationValue } from '../crypto';
-import { fetchConfig, fetchKnown, fetchSeed, fetchTranslations, init } from '../common';
+import {
+  fetchConfig,
+  fetchKnown,
+  fetchKnownContext,
+  fetchSeed,
+  fetchTranslations,
+  init,
+} from '../common';
 
 describe('common - cache ttl', () => {
   beforeEach(() => {
@@ -106,7 +113,7 @@ describe('common - cache ttl', () => {
     expect(call[1].cache).toBe('force-cache');
   });
 
-  it('applies GET cache semantics to known requests', async () => {
+  it('uses batched POST requests for known checks', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: [], errors: [] }),
@@ -128,11 +135,45 @@ describe('common - cache ttl', () => {
     ]);
 
     const call = fetchMock.mock.calls[0];
+    expect(call[0]).toContain('/api/known');
+    expect(call[0]).not.toContain('/api/known?');
+    expect(call[1].method).toBe('POST');
+    expect(call[1].cache).toBeUndefined();
+    expect(call[1].headers).toEqual(
+      expect.objectContaining({
+        'Content-Type': 'application/json',
+      })
+    );
+    expect(JSON.parse(String(call[1].body))).toEqual({
+      payload: [
+        {
+          targetLocale: 'es-ES',
+          key: 'key-1',
+          textHash: 'hash-1',
+          contextFingerprint: 'fp-1',
+        },
+      ],
+    });
+  });
+
+  it('uses cached GET requests for known context snapshots', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [], errors: [] }),
+    });
+
+    init({
+      key: 'test-api-key',
+      fetcher: fetchMock as typeof fetch,
+      cacheTtlSeconds: 90,
+    });
+
+    await fetchKnownContext('es-ES', 'key-1');
+
+    const call = fetchMock.mock.calls[0];
     expect(call[0]).toContain('/api/known?');
     expect(call[0]).toContain('targetLocale=es-ES');
     expect(call[0]).toContain('key=key-1');
-    expect(call[0]).toContain('textHash=hash-1');
-    expect(call[0]).toContain('contextFingerprint=fp-1');
     expect(call[1].method).toBe('GET');
     expect(call[1].cache).toBe('force-cache');
   });

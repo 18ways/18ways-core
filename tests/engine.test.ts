@@ -6,11 +6,20 @@ import { formatWaysParser } from '../parsers/ways-parser';
 
 describe('WaysEngine', () => {
   it('returns source text for base locale while still sending a capture request', async () => {
-    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const body = JSON.parse(String(init?.body || '{}')) as {
+        payload?: Array<{
+          targetLocale: string;
+          key: string;
+          textHash: string;
+          contextFingerprint?: string | null;
+        }>;
+      };
       const url = String(input);
-      const body = url.endsWith('/known') ? { data: [], errors: [] } : { data: [], errors: [] };
+      const isKnownRequest = Array.isArray(body.payload) && init?.method === 'POST';
+      const responseBody = isKnownRequest ? { data: [], errors: [] } : { data: [], errors: [] };
 
-      return new Response(JSON.stringify(body), {
+      return new Response(JSON.stringify(responseBody), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -30,6 +39,11 @@ describe('WaysEngine', () => {
     await engine.getStore().waitForIdle();
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(String(fetcher.mock.calls[0]?.[0])).toContain('/known');
+    expect(fetcher.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+      })
+    );
     expect(String(fetcher.mock.calls[1]?.[0])).toContain('/translate');
   });
 
@@ -77,20 +91,22 @@ describe('WaysEngine', () => {
   });
 
   it('keeps request origins scoped to each engine instance', async () => {
-    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = new URL(String(input));
+      const body = JSON.parse(String(init?.body || '{}')) as {
+        payload?: Array<{
+          targetLocale: string;
+          key: string;
+          textHash: string;
+          contextFingerprint?: string | null;
+        }>;
+      };
 
-      if (url.pathname.endsWith('/known')) {
+      if (url.pathname.endsWith('/known') && init?.method === 'POST') {
+        const firstEntry = Array.isArray(body.payload) ? body.payload[0] : null;
         return new Response(
           JSON.stringify({
-            data: [
-              {
-                targetLocale: url.searchParams.get('targetLocale'),
-                key: url.searchParams.get('key'),
-                textHash: url.searchParams.get('textHash'),
-                contextFingerprint: null,
-              },
-            ],
+            data: firstEntry ? [firstEntry] : [],
             errors: [],
           }),
           {
@@ -134,6 +150,7 @@ describe('WaysEngine', () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({
+        method: 'POST',
         headers: expect.objectContaining({
           origin: 'https://first.18ways.com',
         }),
@@ -141,6 +158,7 @@ describe('WaysEngine', () => {
     );
     expect(fetcher.mock.calls[1]?.[1]).toEqual(
       expect.objectContaining({
+        method: 'POST',
         headers: expect.objectContaining({
           origin: 'https://second.18ways.com',
         }),

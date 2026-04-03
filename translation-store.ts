@@ -1,5 +1,6 @@
 import set from 'set-value';
 import type {
+  FetchKnownContextResult,
   FetchKnownResult,
   FetchTranslationsResult,
   InProgressTranslation,
@@ -26,6 +27,11 @@ type FetchTranslationsFn = (
 ) => Promise<FetchTranslationsResult | undefined>;
 
 type FetchKnownFn = (entries: KnownTranslationEntry[]) => Promise<FetchKnownResult | undefined>;
+
+type FetchKnownContextFn = (input: {
+  targetLocale: string;
+  key: string;
+}) => Promise<FetchKnownContextResult | undefined>;
 
 const ERROR_CACHE_TTL_MS = 1000 * 60;
 
@@ -62,11 +68,14 @@ export class TranslationStore {
   private translations: Translations;
   private fetchTranslations: FetchTranslationsFn;
   private fetchKnown?: FetchKnownFn;
+  private fetchKnownContext?: FetchKnownContextFn;
   private listeners = new Set<() => void>();
   private translationListeners = new Set<() => void>();
   private pending = new Map<string, InProgressTranslation>();
   private inFlight = new Set<string>();
   private completed = new Set<string>();
+  private knownContextEntries = new Map<string, Set<string>>();
+  private knownContextLoads = new Map<string, Promise<Set<string> | null>>();
   private pendingByKey = new Map<string, number>();
   private inFlightByKey = new Map<string, number>();
   private errorCache = new Map<string, number>();
@@ -80,10 +89,12 @@ export class TranslationStore {
     translations: Translations;
     fetchTranslations: FetchTranslationsFn;
     fetchKnown?: FetchKnownFn;
+    fetchKnownContext?: FetchKnownContextFn;
   }) {
     this.translations = options.translations;
     this.fetchTranslations = options.fetchTranslations;
     this.fetchKnown = options.fetchKnown;
+    this.fetchKnownContext = options.fetchKnownContext;
     this.translationSnapshot = {
       version: this.version,
       translations: this.translations,
@@ -191,6 +202,13 @@ export class TranslationStore {
     Array.from(this.errorCache.keys()).forEach((entryId) => {
       if (entryMatchesContextKey(entryId, contextKey)) {
         this.errorCache.delete(entryId);
+      }
+    });
+
+    Array.from(this.knownContextEntries.keys()).forEach((cacheKey) => {
+      if (this.getContextKeyFromKnownContextCacheKey(cacheKey) === contextKey) {
+        this.knownContextEntries.delete(cacheKey);
+        this.knownContextLoads.delete(cacheKey);
       }
     });
 
@@ -339,9 +357,47 @@ export class TranslationStore {
         const knownCaptureEntryIds = new Set<string>();
         const unknownCaptureEntries: InProgressTranslation[] = [];
 
-        if (captureEntries.length && this.fetchKnown) {
+        if (captureEntries.length) {
+          const captureEntriesByContext = new Map<string, InProgressTranslation[]>();
+          captureEntries.forEach((entry) => {
+            const cacheKey = this.buildKnownContextCacheKey(entry.targetLocale, entry.key);
+            const existingEntries = captureEntriesByContext.get(cacheKey);
+            if (existingEntries) {
+              existingEntries.push(entry);
+              return;
+            }
+            captureEntriesByContext.set(cacheKey, [entry]);
+          });
+
+          for (const [cacheKey, contextEntries] of captureEntriesByContext.entries()) {
+            const firstEntry = contextEntries[0];
+            const knownContextEntries = await this.ensureKnownContextEntries({
+              targetLocale: firstEntry.targetLocale,
+              key: firstEntry.key,
+            });
+
+            if (!knownContextEntries) {
+              unknownCaptureEntries.push(...contextEntries);
+              continue;
+            }
+
+            contextEntries.forEach((entry) => {
+              const id = translationEntryId(entry);
+              if (knownContextEntries.has(id)) {
+                knownCaptureEntryIds.add(id);
+                this.completed.add(id);
+                return;
+              }
+
+              unknownCaptureEntries.push(entry);
+            });
+            this.knownContextEntries.set(cacheKey, knownContextEntries);
+          }
+        }
+
+        if (unknownCaptureEntries.length && this.fetchKnown) {
           const knownResult = await this.fetchKnown(
-            captureEntries.map((entry) => ({
+            unknownCaptureEntries.map((entry) => ({
               targetLocale: entry.targetLocale,
               key: entry.key,
               textHash: entry.textHash,
@@ -350,33 +406,26 @@ export class TranslationStore {
           );
 
           if (knownResult && Array.isArray(knownResult.data)) {
+            this.rememberKnownEntries(knownResult.data);
             knownResult.data.forEach((entry) => {
-              knownCaptureEntryIds.add(
-                translationEntryId({
-                  targetLocale: entry.targetLocale,
-                  key: entry.key,
-                  textHash: entry.textHash,
-                  contextFingerprint: entry.contextFingerprint ?? undefined,
-                })
-              );
+              const id = translationEntryId({
+                targetLocale: entry.targetLocale,
+                key: entry.key,
+                textHash: entry.textHash,
+                contextFingerprint: entry.contextFingerprint ?? undefined,
+              });
+              knownCaptureEntryIds.add(id);
+              this.completed.add(id);
             });
-
-            captureEntries.forEach((entry) => {
-              const id = translationEntryId(entry);
-              if (knownCaptureEntryIds.has(id)) {
-                this.completed.add(id);
-                return;
-              }
-              unknownCaptureEntries.push(entry);
-            });
-          } else {
-            unknownCaptureEntries.push(...captureEntries);
           }
-        } else {
-          unknownCaptureEntries.push(...captureEntries);
         }
 
-        const fetchBatch = [...regularEntries, ...unknownCaptureEntries];
+        const fetchBatch = [
+          ...regularEntries,
+          ...unknownCaptureEntries.filter(
+            (entry) => !knownCaptureEntryIds.has(translationEntryId(entry))
+          ),
+        ];
         if (fetchBatch.length) {
           const result = await this.fetchTranslations(fetchBatch);
           if (!result || !Array.isArray(result.data) || !Array.isArray(result.errors)) {
@@ -422,6 +471,16 @@ export class TranslationStore {
             const triple = translationEntryTriple(entry);
             if (successfulRequestIds.has(id) || successfulRequestTriples.has(triple)) {
               this.completed.add(id);
+              if (isCaptureEntry(entry)) {
+                this.rememberKnownEntries([
+                  {
+                    targetLocale: entry.targetLocale,
+                    key: entry.key,
+                    textHash: entry.textHash,
+                    contextFingerprint: entry.contextFingerprint ?? null,
+                  },
+                ]);
+              }
               return;
             }
 
@@ -482,5 +541,80 @@ export class TranslationStore {
     if (translationsChanged) {
       this.translationListeners.forEach((listener) => listener());
     }
+  };
+
+  private buildKnownContextCacheKey = (targetLocale: string, key: string): string =>
+    JSON.stringify([targetLocale, key]);
+
+  private getContextKeyFromKnownContextCacheKey = (cacheKey: string): string | null => {
+    try {
+      const parsed = JSON.parse(cacheKey);
+      return Array.isArray(parsed) && typeof parsed[1] === 'string' ? parsed[1] : null;
+    } catch {
+      return null;
+    }
+  };
+
+  private rememberKnownEntries = (entries: KnownTranslationEntry[]): void => {
+    entries.forEach((entry) => {
+      const cacheKey = this.buildKnownContextCacheKey(entry.targetLocale, entry.key);
+      const existingEntries = this.knownContextEntries.get(cacheKey) || new Set<string>();
+      existingEntries.add(
+        translationEntryId({
+          targetLocale: entry.targetLocale,
+          key: entry.key,
+          textHash: entry.textHash,
+          contextFingerprint: entry.contextFingerprint ?? undefined,
+        })
+      );
+      this.knownContextEntries.set(cacheKey, existingEntries);
+    });
+  };
+
+  private ensureKnownContextEntries = async (input: {
+    targetLocale: string;
+    key: string;
+  }): Promise<Set<string> | null> => {
+    const cacheKey = this.buildKnownContextCacheKey(input.targetLocale, input.key);
+    const cachedEntries = this.knownContextEntries.get(cacheKey);
+    if (cachedEntries) {
+      return cachedEntries;
+    }
+
+    if (!this.fetchKnownContext) {
+      return null;
+    }
+
+    const existingLoad = this.knownContextLoads.get(cacheKey);
+    if (existingLoad) {
+      return await existingLoad;
+    }
+
+    const loadPromise = this.fetchKnownContext(input)
+      .then((result) => {
+        if (!result || !Array.isArray(result.data)) {
+          return null;
+        }
+
+        const knownEntries = new Set<string>();
+        result.data.forEach((entry) => {
+          knownEntries.add(
+            translationEntryId({
+              targetLocale: entry.targetLocale,
+              key: entry.key,
+              textHash: entry.textHash,
+              contextFingerprint: entry.contextFingerprint ?? undefined,
+            })
+          );
+        });
+        this.knownContextEntries.set(cacheKey, knownEntries);
+        return knownEntries;
+      })
+      .finally(() => {
+        this.knownContextLoads.delete(cacheKey);
+      });
+
+    this.knownContextLoads.set(cacheKey, loadPromise);
+    return await loadPromise;
   };
 }

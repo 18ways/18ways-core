@@ -122,6 +122,14 @@ export interface FetchKnownResult {
   }>;
 }
 
+export interface FetchKnownContextResult {
+  data: KnownTranslationEntry[];
+  errors: Array<{
+    targetLocale: string;
+    key: string;
+  }>;
+}
+
 export interface FetchSeedResult {
   data: Translations;
   errors?: Array<{ key?: string; targetLocale?: string; hash_id?: string; reason?: string }>;
@@ -755,14 +763,9 @@ export const fetchKnown = async (
 
   const result = await fetchX<FetchKnownResult | undefined>({
     url: '/known',
-    method: 'GET',
+    method: 'POST',
+    payload: { payload: sortedEntries },
     requestOptions: options,
-    queryParams: {
-      targetLocale: sortedEntries.map((entry) => entry.targetLocale),
-      key: sortedEntries.map((entry) => entry.key),
-      textHash: sortedEntries.map((entry) => entry.textHash),
-      contextFingerprint: sortedEntries.map((entry) => entry.contextFingerprint || ''),
-    },
     onError: (e) => {
       console.error(e);
       return undefined;
@@ -770,6 +773,33 @@ export const fetchKnown = async (
   });
   emitRuntimeNetworkEvent({ type: 'known', request: entries, result });
   return result;
+};
+
+export const fetchKnownContext = async (
+  targetLocale: string,
+  key: string,
+  options?: FetchRequestOptions
+): Promise<FetchKnownContextResult | undefined> => {
+  if (isDemoApiKey(apiKey)) {
+    return {
+      data: [],
+      errors: [],
+    };
+  }
+
+  return await fetchX<FetchKnownContextResult | undefined>({
+    url: '/known',
+    method: 'GET',
+    queryParams: {
+      targetLocale,
+      key,
+    },
+    requestOptions: options,
+    onError: (e) => {
+      console.error(e);
+      return undefined;
+    },
+  });
 };
 
 export const fetchSeed = async (

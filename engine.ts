@@ -3,6 +3,7 @@ import {
   DEFAULT_TRANSLATION_FALLBACK_CONFIG,
   fetchConfig,
   fetchKnown,
+  fetchKnownContext,
   fetchTranslations,
   generateHashId,
   init,
@@ -90,6 +91,11 @@ export class WaysEngine {
     this.store = new TranslationStore({
       translations: (options.initialTranslations || {}) as Translations,
       fetchKnown: (entries) => fetchKnown(entries, { origin: this.requestOrigin }),
+      fetchKnownContext:
+        typeof window !== 'undefined'
+          ? ({ targetLocale, key }) =>
+              fetchKnownContext(targetLocale, key, { origin: this.requestOrigin })
+          : undefined,
       fetchTranslations: (entries) => fetchTranslations(entries, { origin: this.requestOrigin }),
     });
 
