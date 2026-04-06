@@ -4,6 +4,12 @@ import type { InProgressTranslation } from '../common';
 import { encryptTranslationValue } from '../crypto';
 import { formatWaysParser } from '../parsers/ways-parser';
 
+const flushAsyncWork = async (passes = 8) => {
+  for (let index = 0; index < passes; index += 1) {
+    await Promise.resolve();
+  }
+};
+
 describe('WaysEngine', () => {
   it('returns source text for base locale while still sending a capture request', async () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
@@ -15,7 +21,6 @@ describe('WaysEngine', () => {
           contextFingerprint?: string | null;
         }>;
       };
-      const url = String(input);
       const isKnownRequest = Array.isArray(body.payload) && init?.method === 'POST';
       const responseBody = isKnownRequest ? { data: [], errors: [] } : { data: [], errors: [] };
 
@@ -36,7 +41,7 @@ describe('WaysEngine', () => {
 
     const value = await engine.t('Hello world');
     expect(value).toBe('Hello world');
-    await engine.getStore().waitForIdle();
+    await flushAsyncWork();
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(String(fetcher.mock.calls[0]?.[0])).toContain('/known');
     expect(fetcher.mock.calls[0]?.[1]).toEqual(
@@ -87,7 +92,9 @@ describe('WaysEngine', () => {
 
     expect(first).toBe('Hola Ada');
     expect(second).toBe('Hola Ada');
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain('/seed');
+    expect(String(fetcher.mock.calls[1]?.[0])).toContain('/translate');
   });
 
   it('keeps request origins scoped to each engine instance', async () => {
@@ -262,6 +269,8 @@ describe('WaysEngine', () => {
     const value = await engine.t(source, { vars: { count: 2 } });
 
     expect(value).toBe('2 mensajes');
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain('/seed');
+    expect(String(fetcher.mock.calls[1]?.[0])).toContain('/translate');
   });
 });

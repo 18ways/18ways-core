@@ -1,7 +1,7 @@
-/// <reference path="./global.d.ts" />
-
+import type {} from './global';
 import { encryptTranslationValue, generateHashIdV2 } from './crypto';
 import { canonicalizeLocale } from './i18n-shared';
+import { deepMerge } from './object-utils';
 import {
   isRichTextMarkup,
   mapRichTextTextNodes,
@@ -59,6 +59,22 @@ export interface TranslationFallbackConfig {
     locale: string;
     fallback: TranslationFallbackMode;
   }>;
+}
+
+export interface TranslationStoreHydrationPayload {
+  translations?: Translations;
+  config?: {
+    acceptedLocales?: string[];
+    translationFallback?: TranslationFallbackConfig;
+  };
+}
+
+export interface ResolvedTranslationStoreHydrationPayload {
+  translations: Translations;
+  config: {
+    acceptedLocales: string[];
+    translationFallback: TranslationFallbackConfig;
+  };
 }
 
 export const DEFAULT_TRANSLATION_FALLBACK_CONFIG: TranslationFallbackConfig = {
@@ -165,18 +181,44 @@ export type RuntimeNetworkEvent =
       result: FetchTranslationsResult;
     };
 
+const RUNTIME_NETWORK_EVENT_BUFFER_LIMIT = 50;
 const runtimeNetworkListeners = new Set<(event: RuntimeNetworkEvent) => void>();
+const runtimeNetworkEventBuffer: RuntimeNetworkEvent[] = [];
 
 export const subscribeRuntimeNetworkEvents = (
-  listener: (event: RuntimeNetworkEvent) => void
+  listener: (event: RuntimeNetworkEvent) => void,
+  options?: { replayBuffered?: boolean }
 ): (() => void) => {
   runtimeNetworkListeners.add(listener);
+
+  if (options?.replayBuffered) {
+    runtimeNetworkEventBuffer.forEach((event) => {
+      try {
+        listener(event);
+      } catch (error) {
+        console.error('[18ways] runtime network event listener failed during replay:', error);
+      }
+    });
+  }
+
   return () => {
     runtimeNetworkListeners.delete(listener);
   };
 };
 
+export const clearRuntimeNetworkEventsForTesting = (): void => {
+  runtimeNetworkEventBuffer.length = 0;
+};
+
 const emitRuntimeNetworkEvent = (event: RuntimeNetworkEvent): void => {
+  runtimeNetworkEventBuffer.push(event);
+  if (runtimeNetworkEventBuffer.length > RUNTIME_NETWORK_EVENT_BUFFER_LIMIT) {
+    runtimeNetworkEventBuffer.splice(
+      0,
+      runtimeNetworkEventBuffer.length - RUNTIME_NETWORK_EVENT_BUFFER_LIMIT
+    );
+  }
+
   runtimeNetworkListeners.forEach((listener) => {
     try {
       listener(event);
@@ -554,17 +596,88 @@ export const getWindowTranslationFallbackConfig = (): TranslationFallbackConfig 
     return null;
   }
 
-  return window.__18WAYS_TRANSLATION_FALLBACK_CONFIG__
-    ? normalizeTranslationFallbackConfig(window.__18WAYS_TRANSLATION_FALLBACK_CONFIG__)
-    : null;
+  const windowStoreConfig = window.__18WAYS_TRANSLATION_STORE__?.config;
+  if (!windowStoreConfig?.translationFallback) {
+    return null;
+  }
+
+  const normalizedConfig = normalizeTranslationFallbackConfig(
+    windowStoreConfig.translationFallback
+  );
+  const hasExplicitAcceptedLocales =
+    Array.isArray(windowStoreConfig.acceptedLocales) &&
+    windowStoreConfig.acceptedLocales.length > 0;
+  const hasExplicitFallbackConfig =
+    normalizedConfig.default !== DEFAULT_TRANSLATION_FALLBACK_CONFIG.default ||
+    normalizedConfig.overrides.length > 0;
+
+  return hasExplicitAcceptedLocales || hasExplicitFallbackConfig ? normalizedConfig : null;
+};
+
+const getDefaultWindowTranslationStorePayload = (): ResolvedTranslationStoreHydrationPayload => ({
+  translations: {},
+  config: {
+    acceptedLocales: [],
+    translationFallback: DEFAULT_TRANSLATION_FALLBACK_CONFIG,
+  },
+});
+
+export const mergeTranslationStoreHydrationPayload = (
+  target: TranslationStoreHydrationPayload,
+  input: TranslationStoreHydrationPayload | null | undefined
+): ResolvedTranslationStoreHydrationPayload => {
+  const translationsTarget =
+    target.translations && typeof target.translations === 'object' ? target.translations : {};
+  const mergedAcceptedLocales = Array.isArray(input?.config?.acceptedLocales)
+    ? normalizeAcceptedLocaleList(input?.config?.acceptedLocales || [])
+    : normalizeAcceptedLocaleList(target.config?.acceptedLocales || []);
+  const mergedTranslationFallback = input?.config?.translationFallback
+    ? normalizeTranslationFallbackConfig(input.config.translationFallback)
+    : normalizeTranslationFallbackConfig(target.config?.translationFallback);
+
+  if (input?.translations && typeof input.translations === 'object') {
+    deepMerge(translationsTarget as Record<string, any>, input.translations as Record<string, any>);
+  }
+
+  target.translations = translationsTarget;
+  target.config = {
+    acceptedLocales: mergedAcceptedLocales,
+    translationFallback: mergedTranslationFallback,
+  };
+
+  return target as ResolvedTranslationStoreHydrationPayload;
+};
+
+export const getWindowTranslationStoreHydrationPayload =
+  (): ResolvedTranslationStoreHydrationPayload | null => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    const target = window.__18WAYS_TRANSLATION_STORE__ || getDefaultWindowTranslationStorePayload();
+    const mergedPayload = mergeTranslationStoreHydrationPayload(target, undefined);
+    window.__18WAYS_TRANSLATION_STORE__ = mergedPayload;
+    return mergedPayload;
+  };
+
+export const mergeWindowTranslationStoreHydrationPayload = (
+  input: TranslationStoreHydrationPayload | null | undefined
+): ResolvedTranslationStoreHydrationPayload | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const target =
+    getWindowTranslationStoreHydrationPayload() || getDefaultWindowTranslationStorePayload();
+  const mergedPayload = mergeTranslationStoreHydrationPayload(target, input);
+  window.__18WAYS_TRANSLATION_STORE__ = mergedPayload;
+  return mergedPayload;
 };
 
 export const getInMemoryTranslations = () => {
   if (typeof window !== 'undefined') {
-    if (!window.__18WAYS_IN_MEMORY_TRANSLATIONS__) {
-      window.__18WAYS_IN_MEMORY_TRANSLATIONS__ = {};
-    }
-    return window.__18WAYS_IN_MEMORY_TRANSLATIONS__;
+    const payload = getWindowTranslationStoreHydrationPayload();
+    return payload?.translations || {};
   }
 
   if (!serverCache) {
@@ -700,7 +813,7 @@ const fetchX = async <T>({
 
     try {
       return await result.json();
-    } catch (jsonError) {
+    } catch {
       // If JSON parsing fails, treat it as an error
       throw new Error('Invalid JSON response');
     }

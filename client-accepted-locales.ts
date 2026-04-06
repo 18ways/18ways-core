@@ -1,4 +1,4 @@
-import { resolveAcceptedLocales } from './common';
+import { getWindowTranslationStoreHydrationPayload, resolveAcceptedLocales } from './common';
 import { recognizeLocale } from './i18n-shared';
 
 export const readAcceptedLocalesFromWindow = (): string[] => {
@@ -6,13 +6,16 @@ export const readAcceptedLocalesFromWindow = (): string[] => {
     return [];
   }
 
-  if (!Array.isArray(window.__18WAYS_ACCEPTED_LOCALES__)) {
+  const hydratedAcceptedLocales =
+    getWindowTranslationStoreHydrationPayload()?.config.acceptedLocales;
+
+  if (!Array.isArray(hydratedAcceptedLocales)) {
     return [];
   }
 
   return resolveAcceptedLocales(
     undefined,
-    window.__18WAYS_ACCEPTED_LOCALES__
+    hydratedAcceptedLocales
       .map((locale) => recognizeLocale(locale))
       .filter((locale): locale is string => Boolean(locale))
   );

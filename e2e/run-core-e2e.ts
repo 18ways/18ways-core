@@ -57,36 +57,66 @@ const run = async () => {
 
   const mockFetcher: typeof fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input.toString();
-    assert.equal(url.endsWith('/translate'), true);
+    const { pathname } = new URL(url);
 
     const headers = new Headers((init?.headers || {}) as HeadersInit);
     assert.equal(headers.get('x-api-key'), 'demo-key');
 
-    const payload = JSON.parse(String(init?.body || '{}')) as { payload: InProgressTranslation[] };
-    const items = Array.isArray(payload.payload) ? payload.payload : [];
+    if (pathname.endsWith('/translate')) {
+      const payload = JSON.parse(String(init?.body || '{}')) as {
+        payload: InProgressTranslation[];
+      };
+      const items = Array.isArray(payload.payload) ? payload.payload : [];
 
-    const data = items.map((item) => {
-      fetchCalls.push({ targetLocale: item.targetLocale, key: item.key });
-      const translatedText = TRANSLATION_TABLE[item.targetLocale]?.[item.text] || item.text;
+      const data = items.map((item) => {
+        fetchCalls.push({ targetLocale: item.targetLocale, key: item.key });
+        const translatedText = TRANSLATION_TABLE[item.targetLocale]?.[item.text] || item.text;
 
-      return {
-        locale: item.targetLocale,
-        key: item.key,
-        textHash: item.textHash,
-        translation: encryptTranslationValue({
-          translatedText,
-          sourceText: item.text,
+        return {
           locale: item.targetLocale,
           key: item.key,
           textHash: item.textHash,
-        }),
-      };
-    });
+          translation: encryptTranslationValue({
+            translatedText,
+            sourceText: item.text,
+            locale: item.targetLocale,
+            key: item.key,
+            textHash: item.textHash,
+          }),
+        };
+      });
 
-    return new Response(JSON.stringify({ data, errors: [] }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+      return new Response(JSON.stringify({ data, errors: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (pathname.endsWith('/known')) {
+      return new Response(JSON.stringify({ data: [], errors: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (pathname.endsWith('/seed')) {
+      return new Response(
+        JSON.stringify({
+          data: {},
+          errors: [],
+          usage: {
+            wordsRetrieved: 0,
+            translationsRetrieved: 0,
+          },
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    throw new Error(`Unexpected mock request: ${url}`);
   };
 
   const engine = create18waysEngine({
