@@ -4,9 +4,23 @@ import type { InProgressTranslation } from '../common';
 import { encryptTranslationValue } from '../crypto';
 import { formatWaysParser } from '../parsers/ways-parser';
 
-const flushAsyncWork = async (passes = 8) => {
-  for (let index = 0; index < passes; index += 1) {
-    await Promise.resolve();
+const waitForCondition = async (assertion: () => void, timeoutMs = 1000, intervalMs = 5) => {
+  const start = Date.now();
+  let lastError: unknown;
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  if (lastError) {
+    throw lastError;
   }
 };
 
@@ -41,8 +55,9 @@ describe('WaysEngine', () => {
 
     const value = await engine.t('Hello world');
     expect(value).toBe('Hello world');
-    await flushAsyncWork();
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    await waitForCondition(() => {
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    });
     expect(String(fetcher.mock.calls[0]?.[0])).toContain('/known');
     expect(fetcher.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({
