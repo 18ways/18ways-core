@@ -302,4 +302,37 @@ describe('common - cache ttl', () => {
     ).toEqual('Uryyb <link>jbeyq</link>');
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('serves reverse rot13 translations locally for the demo token', async () => {
+    const fetchMock = vi.fn();
+
+    init({
+      key: 'pk_dummy_demo_token',
+      baseLocale: 'en-US',
+      fetcher: fetchMock as typeof fetch,
+    });
+
+    const result = await fetchTranslations([
+      {
+        key: 'app',
+        textHash: 'hash-2',
+        baseLocale: 'en-US-x-caesar',
+        targetLocale: 'en-US',
+        text: 'Uryyb <link>jbeyq</link>',
+      },
+    ]);
+
+    expect(result.errors).toEqual([]);
+    expect(result.data).toHaveLength(1);
+    expect(
+      decryptTranslationValue({
+        encryptedText: result.data[0].translation,
+        sourceText: 'Uryyb <link>jbeyq</link>',
+        locale: 'en-US',
+        key: 'app',
+        textHash: 'hash-2',
+      })
+    ).toEqual('Hello <link>world</link>');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

@@ -291,6 +291,26 @@ const isDemoLocaleForBaseLocale = (locale: string, baseLocale?: string | null): 
   return canonicalLocale.toLowerCase() === buildDemoLocale(baseLocale).toLowerCase();
 };
 
+const isDemoTranslationPair = (baseLocale: string, targetLocale: string): boolean => {
+  const canonicalBaseLocale = canonicalizeLocale(baseLocale || DEFAULT_LOCALE) || DEFAULT_LOCALE;
+  const canonicalTargetLocale = canonicalizeLocale(targetLocale);
+
+  if (!canonicalTargetLocale || canonicalBaseLocale === canonicalTargetLocale) {
+    return false;
+  }
+
+  if (isDemoLocaleForBaseLocale(canonicalTargetLocale, canonicalBaseLocale)) {
+    return true;
+  }
+
+  const baseLocaleFromDemoLocale = getBaseLocaleFromDemoLocale(canonicalBaseLocale);
+  if (!baseLocaleFromDemoLocale) {
+    return false;
+  }
+
+  return canonicalTargetLocale.toLowerCase() === baseLocaleFromDemoLocale.toLowerCase();
+};
+
 const rot13Char = (char: string): string => {
   const code = char.charCodeAt(0);
 
@@ -368,7 +388,7 @@ const createDemoTranslationResult = (
       return;
     }
 
-    if (!isDemoLocaleForBaseLocale(targetLocale, baseLocale)) {
+    if (!isDemoTranslationPair(baseLocale, targetLocale)) {
       errors.push({
         locale: targetLocale,
         key: entry.key,
